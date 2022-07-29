@@ -1,3 +1,15 @@
 {
-    "MODULE.hello": "hello"
+    "IpDip": {
+        "Dialog" : {
+            "Title" : "Ip Dip Instruction and Confirmation",
+            "Content1" : "Click on the canvas at appropriate locations to place numbered marks of which one will be randomly chosen.",
+            "Content2" : "Once all the marks have been placed, click on Ip Dip to randomly select one."
+        },
+        "Confirmation" : {
+            "Yes" : "Yes",
+            "No" : "No",
+            "Choose" : "Ip Dip",
+            "Cancel" : "Cancel"
+        }
+    }
 }

@@ -16,16 +16,22 @@
       "discord": "Kerrec Snowmane#5264"
     }
   ],
-  "relationships": [
-    "systems": [],
-    "requires": [],
-  ],
+  "relationships": {
+    "systems" : [],
+    "requires" : []
+  },
   "esmodules": [
     "scripts/ipdip.js"
   ],
   "scripts": [],
   "styles": [],
-  "languages": [],
+  "languages": [
+    {
+      "lang" : "en",
+      "name" : "English",
+      "path" : "languages/en.json"
+    }
+  ],
   "url": "This is auto replaced",
   "manifest": "This is auto replaced",
   "download": "This is auto replaced",
