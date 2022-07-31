@@ -1,12 +1,53 @@
+const textureSRC = "modules/ipdip/assets/Marker.png";
 let markerCounter = 1;
 // Create a container to add the markers into
 const container = new PIXI.Container();
 let markerArr = [];
+let wheelHookId = null;
+let stageScale = null;
 
 async function wait(ms) {
     return new Promise(resolve => {
         setTimeout(resolve, ms);
     });
+}
+
+function cleanup() {
+    canvas.stage.removeChild(container);
+    const childrenArr = container.removeChildren();
+    for (const child of childrenArr) {
+        child.destroy({children: true, texture: true});
+    }
+    markerArr = [];
+    markerCounter = 1;
+    if ( wheelHookId !== null ) Hooks.off('canvasPan', wheelHookId);
+    wheelHookId = null;
+    stageScale = null;
+}
+
+class IpDipDialog extends Dialog {
+    constructor(data, options={}) {
+        super(data, options);
+        this.modifyHeaderButtons();
+    }
+
+    modifyHeaderButtons() {
+        Hooks.once('getApplicationHeaderButtons', (dialog, buttonsArr) => {
+            buttonsArr[0].onclick = () => {
+                cleanup();
+                this.close()
+            };
+        })
+    }
+
+    /* OVERRIDE */
+    _onKeyDown(event) {
+        // Close dialog
+        if ( event.key === "Escape" ) {
+            cleanup();
+            return super._onKeyDown(event);
+        }
+    }
 }
 
 export async function spawnDialog() {
@@ -23,12 +64,17 @@ export async function spawnDialog() {
 
     // Add the container to the stage
     canvas.stage.addChild(container);
+    container.interactive = true;
+    container.on('childAdded', () => {
+        recalculateProbabilities();
+    })
+
 
     // Swap the callback so a left click now does what Ip Dip wants it to do
     canvas.mouseInteractionManager.callbacks.clickLeft = _canvasLeftClick.bind(canvas);
 
     const result = await new Promise(resolve => {
-        new Dialog({
+        new IpDipDialog({
             title: game.i18n.localize("IpDip.Dialog.Title"),
             content:    `<p>${game.i18n.localize("IpDip.Dialog.Content1")}</p>
                         <p>${game.i18n.localize("IpDip.Dialog.Content2")}</p>`,
@@ -51,13 +97,7 @@ export async function spawnDialog() {
     canvas.mouseInteractionManager.callbacks.clickLeft = callbackHolder;
 
     if ( !result || !markerArr.length ) {
-        canvas.stage.removeChild(container);
-        const childrenArr = container.removeChildren();
-        for (const child of childrenArr) {
-            child.destroy({children: true, texture: true});
-        }
-        markerArr = [];
-        markerCounter = 1;
+        cleanup();
         return;
     };
 
@@ -69,21 +109,58 @@ export async function spawnDialog() {
 }
 
 async function _canvasLeftClick(event) {
-    // Load up the marker texture
-    const textureSRC = "modules/ipdip/assets/Marker.png";
-    const sprite = new PIXI.Sprite(await loadTexture(textureSRC));
 
-    const count = new PIXI.BitmapText(markerCounter, {fontName: "IpDipFont"});
-    count.anchor.set(0.5, 0.6);
-
-    sprite.anchor.set(0.5);
+    stageScale = canvas.stage.scale.x;
 
     const marker = new PIXI.Container;
-    const d = canvas.dimensions;
-    const scale = d.size / sprite.texture.orig.width;
+    // Load up the marker texture
+    marker.sprite = new PIXI.Sprite(await loadTexture(textureSRC));
+    marker.sprite.anchor.set(0.5);
 
-    marker.addChild(sprite);
+    const count = new PIXI.BitmapText(markerCounter, {fontName: "IpDipFont"});
+    count.anchor.set(0.5, 0.75);
+
+    marker.prob = new PIXI.BitmapText("%", {fontName: "IpDipFontSmall"});
+    marker.prob.anchor.set(0.5, -0.7);
+
+    if ( wheelHookId === null ) {
+        wheelHookId = Hooks.on('canvasPan', (canvas, data) => {
+
+            let multiplier = 1;
+            if ( data.scale < stageScale) multiplier = -1;
+
+            const loc = canvas.app.renderer.plugins.interaction.mouse.getLocalPosition(canvas.app.stage);
+
+            let targetMarker = undefined;
+            for (const marker of markerArr) {
+                if (    loc.x > (marker.container.x - marker.container.width / 2) &&
+                        loc.x < (marker.container.x + marker.container.width / 2) &&
+                        loc.y > (marker.container.y - marker.container.height / 2) &&
+                        loc.y < (marker.container.y + marker.container.height / 2)        
+                ) {
+                    targetMarker = marker;
+                    targetMarker.weight = targetMarker.weight + 1 * multiplier ? targetMarker.weight += 1 * multiplier : 1;
+                    recalculateProbabilities();
+                    canvas.stage.scale.set(stageScale, stageScale);
+                    canvas.updateBlur(stageScale);
+                    return;
+                }
+            }
+
+            if ( targetMarker === undefined ) {
+                stageScale = data.scale;
+                return;
+            }
+
+
+        });
+    }
+    const d = canvas.dimensions;
+    const scale = d.size / marker.sprite.texture.orig.width;
+
+    marker.addChild(marker.sprite);
     marker.addChild(count);
+    marker.addChild(marker.prob);
     marker.x = event.data.origin.x
     marker.y = event.data.origin.y
     marker.scale.set(scale, scale);
@@ -91,6 +168,8 @@ async function _canvasLeftClick(event) {
     container.addChild(marker);
 
     markerArr.push({id: markerCounter.toString(), weight: 1, container: marker});
+
+    recalculateProbabilities();
 
     markerCounter += 1;
 }
@@ -132,13 +211,7 @@ const debounceFadeAndCleanUp = foundry.utils.debounce( () => {
 function fadeAndCleanUp() {
     
     if ( container.alpha < 0.05 ) {
-        canvas.stage.removeChild(container);
-        const childrenArr = container.removeChildren();
-        for (const child of childrenArr) {
-            child.destroy({children: true, texture: true});
-        }
-        markerArr = [];
-        markerCounter = 1;
+        cleanup();
         container.alpha = 1;
         return;
     }
@@ -146,3 +219,12 @@ function fadeAndCleanUp() {
     container.alpha -= .05;
     debounceFadeAndCleanUp();
 }
+
+function recalculateProbabilities() {
+    const sum = markerArr.reduce((pv, cv) => pv + cv.weight, 0);
+    for (const marker of markerArr) {
+        marker.container.prob.text = Math.round(marker.weight / sum * 100).toString() + "%";
+    }
+
+}
+

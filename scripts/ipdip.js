@@ -27,4 +27,14 @@ Hooks.once('ready', function() {
         fontSize: 150,
         fontWeight: "bold"
     }, {chars: PIXI.BitmapFont.NUMERIC})
+
+    // Create the BitmapFont for the probabilities
+    PIXI.BitmapFont.from("IpDipFontSmall", {
+        fill: "#FFFFFF",
+        fontSize: 50,
+        fontWeight: "bold"
+    }, {chars: [
+        ['0', '9'],
+        '%'
+    ]})
 });
