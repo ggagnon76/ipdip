@@ -1,6 +1,7 @@
-import { spawnDialog } from "./lib/lib.js";
+import { spawnDialog, message_handler } from "./lib/lib.js";
 
 const ModuleId = "ipdip";
+export const SocketModuleName = "module." + ModuleId;
 
 Hooks.once('init', function() {
     game.keybindings.register(ModuleId, "launchDialog", {
@@ -37,4 +38,6 @@ Hooks.once('ready', function() {
         ['0', '9'],
         '%'
     ]})
+
+    game.socket.on(SocketModuleName, message_handler);
 });

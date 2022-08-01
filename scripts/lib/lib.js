@@ -1,3 +1,4 @@
+import { SocketModuleName } from "../ipdip.js";
 const textureSRC = "modules/ipdip/assets/Marker.png";
 let markerCounter = 1;
 // Create a container to add the markers into
@@ -12,7 +13,63 @@ async function wait(ms) {
     });
 }
 
-function cleanup() {
+function socketWrapper(requestID, data=null) {
+    switch(requestID) {
+        case "injectContainer":
+            injectContainer();
+            game.socket.emit(SocketModuleName, {action: "injectContainer"});
+            break;
+        case "cleanUp":
+            cleanUp();
+            game.socket.emit(SocketModuleName, {action: "cleanUp"});
+            break;
+        case "tableResult":
+            processTableResult(data);
+            game.socket.emit(SocketModuleName, {action: "processTableResult", data: data});
+            break;
+        case "newMarker":
+            newMarker(...data);
+            game.socket.emit(SocketModuleName, {action: "newMarker", data: data});
+            break;
+        case "removeContainerHandlers":
+            removeContainerHandlers();
+            game.socket.emit(SocketModuleName, {action: "removeContainerHandlers"});
+            break;
+        case "updateProbabilities":
+            updateProbabilities(...data);
+            game.socket.emit(SocketModuleName, {action: "updateProbabilities", data: data});
+            break;
+        default:
+            ui.notifications.error(`Socket action ${requestID} was not found in socketWrapper.`);
+    }
+}
+
+export function message_handler(request) {
+    switch(request.action) {
+        case "injectContainer":
+            injectContainer();
+            break;
+        case "cleanUp":
+            cleanUp();
+            break;
+        case "processTableResult":
+            processTableResult(request.data);
+            break;
+        case "newMarker":
+            newMarker(...request.data);
+            break;
+        case "removeContainerHandlers":
+            removeContainerHandlers();
+            break;
+        case "updateProbabilities":
+            updateProbabilities(...request.data);
+            break;
+        default:
+            ui.notifications.error(`Function ${request.action} was not found in message_handler.`);
+    }
+}
+
+function cleanUp() {
     canvas.stage.removeChild(container);
     const childrenArr = container.removeChildren();
     for (const child of childrenArr) {
@@ -20,7 +77,7 @@ function cleanup() {
     }
     markerArr = [];
     markerCounter = 1;
-    if ( wheelHookId !== null ) Hooks.off('canvasPan', wheelHookId);
+    if ( wheelHookId !== null) Hooks.off('canvasPan', wheelHookId);
     wheelHookId = null;
     stageScale = null;
 }
@@ -34,7 +91,7 @@ class IpDipDialog extends Dialog {
     modifyHeaderButtons() {
         Hooks.once('getApplicationHeaderButtons', (dialog, buttonsArr) => {
             buttonsArr[0].onclick = () => {
-                cleanup();
+                socketWrapper("cleanUp");
                 this.close()
             };
         })
@@ -44,10 +101,60 @@ class IpDipDialog extends Dialog {
     _onKeyDown(event) {
         // Close dialog
         if ( event.key === "Escape" ) {
-            cleanup();
+            socketWrapper("cleanUp");
             return super._onKeyDown(event);
         }
     }
+}
+
+function recalculateProbabilities() {
+    const sum = markerArr.reduce((pv, cv) => pv + cv.weight, 0);
+    for (const marker of markerArr) {
+        marker.container.prob.text = Math.round(marker.weight / sum * 100).toString() + "%";
+    }
+}
+
+function injectContainer() {
+    canvas.stage.addChild(container);
+    container.interactive = true;
+    container.on('childAdded', () => {
+        recalculateProbabilities();
+    })
+}
+
+function keepResultOnly(id) {
+    for (const marker of markerArr) {
+        if ( marker.id === id) continue;
+        container.removeChild(marker.container);
+        marker.container.destroy({children: true});
+    }
+    markerArr = markerArr.filter(m => m.id === id);
+}
+
+const debounceFadeAndCleanUp = foundry.utils.debounce( () => {
+    fadeAndCleanUp();
+}, 100);
+
+function fadeAndCleanUp() {
+    
+    if ( container.alpha < 0.05 ) {
+        cleanUp();
+        container.alpha = 1;
+        return;
+    }
+
+    container.alpha -= .05;
+    debounceFadeAndCleanUp();
+}
+
+async function processTableResult(tableResult) {
+    keepResultOnly(tableResult);
+    await wait(2000);
+    fadeAndCleanUp();
+}
+
+function removeContainerHandlers() {
+    container.off('childAdded');
 }
 
 export async function spawnDialog() {
@@ -62,13 +169,8 @@ export async function spawnDialog() {
     // Save the callback function so we can replace it later.
     const callbackHolder = canvas.mouseInteractionManager.callbacks.clickLeft;
 
-    // Add the container to the stage
-    canvas.stage.addChild(container);
-    container.interactive = true;
-    container.on('childAdded', () => {
-        recalculateProbabilities();
-    })
-
+    // Add the container to the stage (for all clients)
+    socketWrapper("injectContainer");
 
     // Swap the callback so a left click now does what Ip Dip wants it to do
     canvas.mouseInteractionManager.callbacks.clickLeft = _canvasLeftClick.bind(canvas);
@@ -97,32 +199,62 @@ export async function spawnDialog() {
     canvas.mouseInteractionManager.callbacks.clickLeft = callbackHolder;
 
     if ( !result || !markerArr.length ) {
-        cleanup();
+        socketWrapper("cleanUp");
         return;
     };
 
+    // Remove the eventHandler for the markers so they don't change probability value of the remaining marker
+    socketWrapper("removeContainerHandlers");
+
     const tableResult = await rollTable(markerArr);
 
-    keepResultOnly(tableResult);
-    await wait(2000);
-    fadeAndCleanUp();
+    socketWrapper("tableResult", tableResult);
 }
 
-async function _canvasLeftClick(event) {
-
-    stageScale = canvas.stage.scale.x;
-
+async function newMarker(id, x, y) {
     const marker = new PIXI.Container;
     // Load up the marker texture
     marker.sprite = new PIXI.Sprite(await loadTexture(textureSRC));
     marker.sprite.anchor.set(0.5);
 
-    const count = new PIXI.BitmapText(markerCounter, {fontName: "IpDipFont"});
+    const count = new PIXI.BitmapText(id, {fontName: "IpDipFont"});
     count.anchor.set(0.5, 0.75);
 
     marker.prob = new PIXI.BitmapText("%", {fontName: "IpDipFontSmall"});
     marker.prob.anchor.set(0.5, -0.7);
 
+    const d = canvas.dimensions;
+    const scale = d.size / marker.sprite.texture.orig.width;
+
+    marker.addChild(marker.sprite);
+    marker.addChild(count);
+    marker.addChild(marker.prob);
+
+    marker.x = x;
+    marker.y = y;
+    marker.scale.set(scale, scale);
+
+    markerArr.push({id: markerCounter.toString(), weight: 1, container: marker});
+
+    recalculateProbabilities();
+    
+    container.addChild(marker);
+
+    markerCounter += 1;
+}
+
+function updateProbabilities(id, multiplier) {
+    const marker = markerArr.filter(m => m.id === id).pop();
+    // increases or reduces marker weight, but not below 1.
+    marker.weight = marker.weight + 1 * multiplier ? marker.weight += 1 * multiplier : 1;
+    recalculateProbabilities();
+}
+
+async function _canvasLeftClick(event) {
+
+    socketWrapper("newMarker", [markerCounter, event.data.origin.x, event.data.origin.y]);
+
+    stageScale = canvas.stage.scale.x;
     if ( wheelHookId === null ) {
         wheelHookId = Hooks.on('canvasPan', (canvas, data) => {
 
@@ -139,8 +271,7 @@ async function _canvasLeftClick(event) {
                         loc.y < (marker.container.y + marker.container.height / 2)        
                 ) {
                     targetMarker = marker;
-                    targetMarker.weight = targetMarker.weight + 1 * multiplier ? targetMarker.weight += 1 * multiplier : 1;
-                    recalculateProbabilities();
+                    socketWrapper("updateProbabilities", [marker.id, multiplier]);
                     canvas.stage.scale.set(stageScale, stageScale);
                     canvas.updateBlur(stageScale);
                     return;
@@ -151,27 +282,8 @@ async function _canvasLeftClick(event) {
                 stageScale = data.scale;
                 return;
             }
-
-
         });
     }
-    const d = canvas.dimensions;
-    const scale = d.size / marker.sprite.texture.orig.width;
-
-    marker.addChild(marker.sprite);
-    marker.addChild(count);
-    marker.addChild(marker.prob);
-    marker.x = event.data.origin.x
-    marker.y = event.data.origin.y
-    marker.scale.set(scale, scale);
-
-    container.addChild(marker);
-
-    markerArr.push({id: markerCounter.toString(), weight: 1, container: marker});
-
-    recalculateProbabilities();
-
-    markerCounter += 1;
 }
 
 async function rollTable(markerArr) {
@@ -194,37 +306,3 @@ async function rollTable(markerArr) {
     await table.delete();
     return result.results[0].text;
 }
-
-function keepResultOnly(id) {
-    for (const marker of markerArr) {
-        if ( marker.id === id) continue;
-        container.removeChild(marker.container);
-        marker.container.destroy({children: true});
-    }
-    markerArr = markerArr.filter(m => m.id === id);
-}
-
-const debounceFadeAndCleanUp = foundry.utils.debounce( () => {
-    fadeAndCleanUp();
-}, 100);
-
-function fadeAndCleanUp() {
-    
-    if ( container.alpha < 0.05 ) {
-        cleanup();
-        container.alpha = 1;
-        return;
-    }
-
-    container.alpha -= .05;
-    debounceFadeAndCleanUp();
-}
-
-function recalculateProbabilities() {
-    const sum = markerArr.reduce((pv, cv) => pv + cv.weight, 0);
-    for (const marker of markerArr) {
-        marker.container.prob.text = Math.round(marker.weight / sum * 100).toString() + "%";
-    }
-
-}
-
