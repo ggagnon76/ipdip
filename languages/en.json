@@ -2,8 +2,9 @@
     "IpDip": {
         "Dialog" : {
             "Title" : "Ip Dip Instruction and Confirmation",
-            "Content1" : "Click on the canvas at appropriate locations to place numbered marks of which one will be randomly chosen.",
-            "Content2" : "Once all the marks have been placed, click on Ip Dip to randomly select one."
+            "Content1" : "<em><strong>Left-Click: </strong></em> Click on the canvas at appropriate locations to place numbered markers.",
+            "Content2" : "<em><strong>Mouse wheel: </strong></em> Hover over a marker and scroll the mousewheel to increase/decrease the % chance a given marker will be randomly chosen.",
+            "Content3" : "<em><strong>When finished placing markers: </strong></em> Click on the Ip Dip button in this dialog to randomly select a marker."
         },
         "Confirmation" : {
             "Yes" : "Yes",
