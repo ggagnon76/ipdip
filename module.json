@@ -38,5 +38,10 @@
   "download": "This is auto replaced",
   "license": "LICENSE",
   "readme": "README.md",
-  "media": []
+  "media": [],
+  "flags": {
+    "fvttdevleague" : {
+      "package-jam": 2022
+    }
+  }
 }
