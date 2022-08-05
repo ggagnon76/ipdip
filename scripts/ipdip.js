@@ -172,7 +172,8 @@ async function spawnDialog() {
         new IpDipDialog({
             title: game.i18n.localize("IpDip.Dialog.Title"),
             content:    `<p>${game.i18n.localize("IpDip.Dialog.Content1")}</p>
-                        <p>${game.i18n.localize("IpDip.Dialog.Content2")}</p>`,
+                        <p>${game.i18n.localize("IpDip.Dialog.Content2")}</p>
+                        <p>${game.i18n.localize("IpDip.Dialog.Content3")}</p>`,
             buttons: {
                 yes: {
                     icon: '<i class="fas fa-check"></i>',
