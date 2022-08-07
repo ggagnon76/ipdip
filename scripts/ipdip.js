@@ -25,7 +25,9 @@ const socketDict = {
     tableResult : "tableResult",
     newMarker : "newMarker",
     removeContainerHandlers : "removeContainerHandlers",
-    updateProbabilities : "UpdateProbabilities"
+    updateProbabilities : "UpdateProbabilities",
+    updateIpDipMessage: "updateIpDipMessage",
+    fadeAndCleanUp: "fadeAndCleanUp"
 }
 
 /* Function used fire a function locally for the GM and on clients via socket */
@@ -40,7 +42,7 @@ function socketWrapper(requestID, data=null) {
             game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.cleanUp});
             break;
         case socketDict.tableResult:
-            processTableResult(data);
+            keepResultOnly(data);
             game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.tableResult, data: data});
             break;
         case socketDict.newMarker:
@@ -54,6 +56,14 @@ function socketWrapper(requestID, data=null) {
         case socketDict.updateProbabilities:
             updateProbabilities(...data);
             game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.updateProbabilities, data: data});
+            break;
+        case socketDict.updateIpDipMessage:
+            updateIpDipMessage(...data);
+            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.updateIpDipMessage, data: data});
+            break;
+        case socketDict.fadeAndCleanUp:
+            fadeAndCleanUp();
+            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.fadeAndCleanUp});
             break;
         default:
             ui.notifications.error(`Socket action ${requestID} was not found in socketWrapper.`);
@@ -70,7 +80,7 @@ function message_handler(request) {
             cleanUp();
             break;
         case socketDict.tableResult:
-            processTableResult(request.data);
+            keepResultOnly(request.data);
             break;
         case socketDict.newMarker:
             newMarker(...request.data);
@@ -80,6 +90,12 @@ function message_handler(request) {
             break;
         case socketDict.updateProbabilities:
             updateProbabilities(...request.data);
+            break;
+        case socketDict.updateIpDipMessage:
+            updateIpDipMessage(...request.data);
+            break;
+        case socketDict.fadeAndCleanUp:
+            fadeAndCleanUp();
             break;
         default:
             ui.notifications.error(`Function ${request.action} was not found in message_handler.`);
@@ -208,8 +224,17 @@ async function spawnDialog() {
     // Create a Rollable Table, roll on it, delete the table and return the rolled result
     const tableResult = await rollTable(markerArr);
 
-    // Act on the result.
+    // Clear out all other markers
     socketWrapper(socketDict.tableResult, tableResult);
+
+    // Generate a chat log message with a temporary image
+    const tex = await selectionInCrosshairsPic();
+    ipdipChatMessage(tex);
+
+    await wait(2000);
+
+    // Make the remaining marker fade away then reset everything.
+    socketWrapper(socketDict.fadeAndCleanUp);
 }
 
 /** ********************************************** */
@@ -365,60 +390,39 @@ async function selectionInCrosshairsPic() {
     return image
 }
 
-/* The logic to follow once a marker has been chosen.
-    1) Get rid of the other markers,
-    2) Create an image/texture for the chat message,
-    3) Generate a local (not saved to database) chat message,
-    4) Pause code execution so the user has time to see the remaining marker, then
-    5) Cause the marker to fade until it is gone, then clean up and reset the tracking variables */
-async function processTableResult(tableResult) {
-    keepResultOnly(tableResult);
-    const tex = await selectionInCrosshairsPic();
-    newLocalChatMessage(tex);
-    await wait(2000);
-    fadeAndCleanUp();
-}
-
 /* Remove the eventListener for the marker container, so it doesn't fire off recalculateProbabilities when markers are removed */
 function removeContainerHandlers() {
     container.off('childAdded');
 }
 
-/* Post a local only (not in database) chat message to the ChatLog */
-function postToChatLog(message) {
-    ui.chat.postOne(message);
-    const collection = game.collections.get("ChatMessage");
-    collection.set(message.id, message)
-}
+const updateIpDipMessage = foundry.utils.debounce( (id, texture) => {
+    const imgDiv = ui.chat.element.find(`#ipdip-img-${id}`);
+    imgDiv.append(`<img src="${texture}" object-fit: contain>`)
+}, 100);
 
 /* Generate the data for a local only (not in database) chat message for the ChatLog, that includes an image of the winning marker */
-function newLocalChatMessage(texture) {
+function ipdipChatMessage(texture) {
 
-    Hooks.once('preCreateChatMessage', (chatMessage, options, id) => {
-        const newId = foundry.utils.randomID(16);
-        chatMessage.updateSource({
-            _id: newId,
-            flags: {ipdip: {
-                    is: true
-                }
-            }
-        });
-        chatMessage.content += `<div style="width:100%"><img src="${texture}" object-fit: contain></div>`;
-        postToChatLog(chatMessage);
-        return false;
-    })
-
+    const newId = foundry.utils.randomID(16);
     const content = `
         <p style="text-align:center">Ip dip sky blue,<br>
         Granny sitting on the loo,<br>
         Doing farts, playing darts,<br>
         Lady Luck be with...  <em><strong>YOU</strong></em>?</p>
+        <div id="ipdip-img-${newId}" style="width:100%"></div>
     `;
     const chatData = [{
         speaker: {alias: "Lady Luck"},
-        content: content
+        content: content,
+        flags: {ipdip: {
+                id: newId
+            }
+        }
     }];
+
     ChatMessage.implementation.createDocuments(chatData);
+
+    socketWrapper(socketDict.updateIpDipMessage, [newId, texture])    
 }
 
 /* Create a new marker and place it on the game canvas at the mouse pointer */
@@ -530,17 +534,6 @@ async function rollTable(markerArr) {
  * Custom eventListener for ChatLog message-delete buttons
  * @param {object}   event  The HTML click event
  */
-function _onDeleteIpDipMessage(event) {
-    const coreOnDeleteMessage = ui.chat._onDeleteMessage.bind(ui.chat);
-    event.preventDefault();
-    const li = event.currentTarget.closest(".message");
-    const message = game.messages.get(li.dataset.messageId);
-    if ( message.getFlag(MODULE_ID, "is") ) {
-        ui.chat.deleteMessage(message.id);
-        const collection = game.collections.get("ChatMessage");
-        collection.delete(message.id);
-    } else coreOnDeleteMessage(event);
-}
 
 Hooks.once('init', function() {
     // Create default keybinding to launch the spawnDialog function.
@@ -584,9 +577,4 @@ Hooks.once('ready', function() {
 
     // Enable socket communications and handling
     game.socket.on(SOCKET_MODULE_NAME, message_handler);
-
-    // Replace chat log message delete eventListener
-    ui.chat._element.off("click", "a.message-delete");
-    const onDeleteIpDipMessage = _onDeleteIpDipMessage.bind(ui.chat);
-    ui.chat._element.on("click", "a.message-delete", onDeleteIpDipMessage);
 });
