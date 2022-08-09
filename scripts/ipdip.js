@@ -169,8 +169,10 @@ async function spawnDialog() {
 
     // Save the core canvas callback function so we can replace it later.
     const callbackHolder = canvas.mouseInteractionManager.callbacks.clickLeft;
-    // Save core Token callback function so we can replace it later
+    // Save core Token callback function so we can replace them later
     const tokenLeftClickHolder = canvas.tokens.placeables[0].mouseInteractionManager.callbacks.clickLeft;
+    // Save core DoorControl eventHandler so we can replace them later
+    const doorControlHolder = canvas.walls.doors[0]?.doorControl._onMouseDown;
 
     // Add the container to the stage (for all clients)
     socketWrapper(socketDict.injectContainer);
@@ -181,6 +183,10 @@ async function spawnDialog() {
     // Swap the callback for each token so it drops a marker instead of selecting the token(s)
     for (const token of canvas.tokens.placeables) {
         token.mouseInteractionManager.callbacks.clickLeft = canvasLeftClick;
+    }
+    // Swap the eventHandler for doorControl _onMouseDown
+    for (const wall of canvas.walls.doors) {
+        wall.doorControl.off("mousedown").on("mousedown", () => {});
     }
 
     // Spawn the dialog then wait for user to submit, cancel or close before continuing.
@@ -210,6 +216,10 @@ async function spawnDialog() {
     // Reset the callback function for the token(s) left click
     for (const token of canvas.tokens.placeables) {
         token.mouseInteractionManager.callbacks.clickLeft = tokenLeftClickHolder;
+    }
+    // Reset the eventHandlers for the doorControls left click
+    for (const wall of canvas.walls.doors) {
+        wall.doorControl.off("mousedown").on("mousedown", doorControlHolder);
     }
 
     // If the user canceled or closed the dialog without submitting, or clicked submit without placing a marker...
@@ -353,13 +363,17 @@ async function selectionInCrosshairsPic() {
 
     const d = canvas.dimensions;
     const marker = markerArr[0].container;
-    const texture = captureCanvas({container: canvas.environment, x: marker.x, y: marker.y, scale: 1, width: 3 * d.size, height: 3 * d.size});
+    marker.alpha = 0;
+    const texture = captureCanvas({x: marker.x, y: marker.y, scale: 1, width: 3 * d.size, height: 3 * d.size});
+    marker.alpha = 1
 
     const crosshairContainer = new PIXI.Container();
     crosshairContainer.addChild(new PIXI.Sprite(texture));
 
     crosshairContainer.crosshairSprite = new PIXI.Sprite(await loadTexture(CROSSHAIR_SRC));
     crosshairContainer.crosshairSprite.anchor.set(0.5);
+    crosshairContainer.crosshairSprite.angle = 45;
+    crosshairContainer.crosshairSprite.alpha = .75;
     const scale = (2.5 * d.size) / crosshairContainer.crosshairSprite.texture.orig.width;
     crosshairContainer.crosshairSprite.x = 1.5 * d.size;
     crosshairContainer.crosshairSprite.y = 1.5 * d.size;
@@ -445,8 +459,6 @@ async function newMarker(id, x, y) {
 
     markerArr.push({id: markerCounter.toString(), weight: 1, container: marker});
 
-    recalculateProbabilities();
-    
     container.addChild(marker);
 
     markerCounter += 1;
