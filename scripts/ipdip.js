@@ -617,6 +617,9 @@ Hooks.once('ready', function() {
     // Enable socket communications and handling
     game.socket.on(SOCKET_MODULE_NAME, message_handler);
 
+    // Emit the cleanUp() function to clients in case the DM refreshed browser while the dialog was unfinished.
+    game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.cleanUp});
+
     // Replace chat log message delete eventListener
     ui.chat.element.off("click", "a.message-delete");
     const onDeleteIpDipMessage = _onDeleteIpDipMessage.bind(ui.chat);
