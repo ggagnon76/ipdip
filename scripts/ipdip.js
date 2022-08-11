@@ -482,8 +482,7 @@ async function _canvasLeftClick(event) {
     if ( wheelHookId === null ) {
         wheelHookId = Hooks.on('canvasPan', (canvas, data) => {
 
-            let multiplier = 1;
-            if ( data.scale < stageScale) multiplier = -1;
+            const multiplier = data.scale < stageScale ? -1 : 1
 
             const loc = canvas.app.renderer.plugins.interaction.mouse.getLocalPosition(canvas.app.stage);
 
@@ -611,11 +610,14 @@ Hooks.once('ready', function() {
         '%'
     ]})
 
-    // Expose the spawnDialog function so users can make a macro instead of using the keybinding.
-    game.modules.get(MODULE_ID).spawnDialog = () => spawnDialog();
-
     // Enable socket communications and handling
     game.socket.on(SOCKET_MODULE_NAME, message_handler);
+
+    // The remainder is only applicable to GM accounts.
+    if ( !game.user.isGM )  return;
+
+    // Expose the spawnDialog function so users can make a macro instead of using the keybinding.
+    game.modules.get(MODULE_ID).spawnDialog = () => spawnDialog();
 
     // Emit the cleanUp() function to clients in case the DM refreshed browser while the dialog was unfinished.
     game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.cleanUp});
