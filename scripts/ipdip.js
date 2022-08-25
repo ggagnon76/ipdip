@@ -170,7 +170,7 @@ async function spawnDialog() {
     // Save the core canvas callback function so we can replace it later.
     const callbackHolder = canvas.mouseInteractionManager.callbacks.clickLeft;
     // Save core Token callback function so we can replace them later
-    const tokenLeftClickHolder = canvas.tokens.placeables[0].mouseInteractionManager.callbacks.clickLeft;
+    const tokenLeftClickHolder = canvas.tokens.placeables.length ? canvas.tokens.placeables[0].mouseInteractionManager.callbacks.clickLeft : null;
     // Save core DoorControl eventHandler so we can replace them later
     const doorControlHolder = canvas.walls.doors[0]?.doorControl._onMouseDown;
 
