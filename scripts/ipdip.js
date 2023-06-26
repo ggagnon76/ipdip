@@ -261,7 +261,7 @@ function recalculateProbabilities() {
 /* Adds the container to the game canvas and creates an eventListener which fires when children are added */
 function injectContainer() {
     canvas.stage.addChild(container);
-    container.interactive = true;
+    container.eventMode = 'static';
     container.on('childAdded', () => {
         recalculateProbabilities();
     })
@@ -389,7 +389,7 @@ async function selectionInCrosshairsPic() {
 
     canvas.app.renderer.render(crosshairContainer, finalTexture);
 
-    const image = canvas.app.renderer.extract.base64(finalTexture, "image/webp");
+    const image = await canvas.app.renderer.extract.base64(finalTexture, "image/webp");
 
     crosshairContainer.destroy(true);
 
@@ -405,7 +405,7 @@ async function selectionInCrosshairsPic() {
 async function processTableResult(tableResult, newId) {
     keepResultOnly(tableResult);
     const tex = await selectionInCrosshairsPic();
-    newLocalChatMessage(tex, newId);
+    await newLocalChatMessage(tex, newId);
     await wait(2000);
     fadeAndCleanUp();
 }
@@ -416,21 +416,21 @@ function removeContainerHandlers() {
 }
 
 /* Generate the data for a local only (not in database) chat message for the ChatLog, that includes an image of the winning marker */
-function newLocalChatMessage(texture, id) {
+async function newLocalChatMessage(texture, id) {
 
     const content = `
         <p style="text-align:center">Ip dip sky blue,<br>
         Granny sitting on the loo,<br>
         Doing farts, playing darts,<br>
         Lady Luck be with...  <em><strong>YOU</strong></em>?</p>
-        <div id="ipdip-img" data-ipdip=${id} style="width:100%"><img src="${texture}" object-fit: contain></div>
+        <div id="ipdip-img" data-ipdip="${id}" style="width:100%"><img src="${texture}" object-fit="contain" /></div>
     `;
     const chatData = {
         speaker: {alias: "Lady Luck"},
         content: content
     };
     const message = new ChatMessage(chatData)
-    ui.chat.postOne(message);
+    await ui.chat.postOne(message);
 }
 
 /* Create a new marker and place it on the game canvas at the mouse pointer */
@@ -473,10 +473,9 @@ function updateProbabilities(id, multiplier) {
     recalculateProbabilities();
 }
 
-/*  Left Click logic.  Replaces the event listeners for the canvas and individual tokens */
-async function _canvasLeftClick(event) {
-
-    socketWrapper(socketDict.newMarker, [markerCounter, event.data.origin.x, event.data.origin.y]);
+/* Work-around (hax?) to get around PIXI events anomaly (clicking on a token produces 2 click events) */
+const debounceCanvasLeftClick = foundry.utils.debounce( (event) => {
+    socketWrapper(socketDict.newMarker, [markerCounter, event.interactionData.origin.x, event.interactionData.origin.y]);
 
     stageScale = canvas.stage.scale.x;
     if ( wheelHookId === null ) {
@@ -484,7 +483,7 @@ async function _canvasLeftClick(event) {
 
             const multiplier = data.scale < stageScale ? -1 : 1
 
-            const loc = canvas.app.renderer.plugins.interaction.mouse.getLocalPosition(canvas.app.stage);
+            const loc = canvas.mousePosition;
 
             let targetMarker = undefined;
             for (const marker of markerArr) {
@@ -507,6 +506,11 @@ async function _canvasLeftClick(event) {
             }
         });
     }
+}, 100);
+
+/*  Left Click logic.  Replaces the event listeners for the canvas and individual tokens */
+async function _canvasLeftClick(event) {
+    debounceCanvasLeftClick(event);    
 }
 
 /* Creates a Rollable Table.  Rolls on the table.  Deletes the table and returns the result */
