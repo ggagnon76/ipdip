@@ -363,35 +363,23 @@ async function selectionInCrosshairsPic() {
 
     const d = canvas.dimensions;
     const marker = markerArr[0].container;
+
+    const crosshairSprite = new PIXI.Sprite(await loadTexture(CROSSHAIR_SRC));
+    crosshairSprite.anchor.set(0.5);
+    crosshairSprite.angle = 45;
+    crosshairSprite.alpha = .75;
+    crosshairSprite.x = marker.x;
+    crosshairSprite.y = marker.y;
+
     marker.alpha = 0;
+    container.addChild(crosshairSprite);
     const texture = captureCanvas({x: marker.x, y: marker.y, scale: 1, width: 3 * d.size, height: 3 * d.size});
-    marker.alpha = 1
+    marker.alpha = 1;
+    crosshairSprite.alpha = 0;
 
-    const crosshairContainer = new PIXI.Container();
-    crosshairContainer.addChild(new PIXI.Sprite(texture));
+    const image = await canvas.app.renderer.extract.base64(texture, "image/webp");
 
-    crosshairContainer.crosshairSprite = new PIXI.Sprite(await loadTexture(CROSSHAIR_SRC));
-    crosshairContainer.crosshairSprite.anchor.set(0.5);
-    crosshairContainer.crosshairSprite.angle = 45;
-    crosshairContainer.crosshairSprite.alpha = .75;
-    const scale = (2.5 * d.size) / crosshairContainer.crosshairSprite.texture.orig.width;
-    crosshairContainer.crosshairSprite.x = 1.5 * d.size;
-    crosshairContainer.crosshairSprite.y = 1.5 * d.size;
-    crosshairContainer.crosshairSprite.scale.set(scale, scale);
-    crosshairContainer.addChild(crosshairContainer.crosshairSprite);
-
-    const finalTexture = PIXI.RenderTexture.create({
-        width: 3 * d.size,
-        height: 3 * d.size,
-        scaleMOde: PIXI.SCALE_MODES.LINEAR,
-        resolution: 1
-    });
-
-    canvas.app.renderer.render(crosshairContainer, finalTexture);
-
-    const image = await canvas.app.renderer.extract.base64(finalTexture, "image/webp");
-
-    crosshairContainer.destroy(true);
+    crosshairSprite.destroy(true);
 
     return image
 }
