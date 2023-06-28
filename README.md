@@ -2,7 +2,7 @@
 
 [![GitHub downloads (latest)](https://img.shields.io/badge/dynamic/json?label=Downloads@latest&query=assets[?(@.name.includes('zip'))].download_count&url=https://api.github.com/repos/ggagnon76/ipdip/releases/latest&color=green)](https://github.com/ggagnon76/ipdip/releases/latest)
 
-**[Compatibility]**: *FoundryVTT* V10  
+**[Compatibility]**: *FoundryVTT* V11  
 **[Systems]**: *ALL*  
 **[Languages]**: *English*
 
