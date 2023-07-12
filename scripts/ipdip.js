@@ -406,15 +406,11 @@ function removeContainerHandlers() {
 /* Generate the data for a local only (not in database) chat message for the ChatLog, that includes an image of the winning marker */
 async function newLocalChatMessage(texture, id) {
 
-    const content = `
-        <p style="text-align:center">Ip dip sky blue,<br>
-        Granny sitting on the loo,<br>
-        Doing farts, playing darts,<br>
-        Lady Luck be with...  <em><strong>YOU</strong></em>?</p>
+    const content = game.settings.get(MODULE_ID, "Message") + `
         <div id="ipdip-img" data-ipdip="${id}" style="width:100%"><img src="${texture}" object-fit="contain" /></div>
     `;
     const chatData = {
-        speaker: {alias: "Lady Luck"},
+        speaker: {Speaker: game.settings.get(MODULE_ID, "Speaker")},
         content: content
     };
     const message = new ChatMessage(chatData)
@@ -623,3 +619,43 @@ Hooks.once('ready', function() {
     ui.chat.element.find("a.chat-flush").unbind("click");
     ui.chat.element.find("a.chat-flush").click(flushChatLog);
 });
+
+// World settings to allow the end user to customize the chat card Speaker and the chat card message
+Hooks.once('init', () => {
+    game.settings.register(MODULE_ID, "Speaker", {
+        scope: "world",
+        config: false,
+        requiresReload: false,
+        type: String,
+        default: "Lady Luck"
+    })
+
+    game.settings.registerMenu(MODULE_ID, "SpeakerMenu", {
+        name: game.i18n.localize("IpDip.Settings.Speaker.Name"),
+        label: game.i18n.localize("IpDip.Settings.Speaker.Label"),
+        hint: game.i18n.localize("IpDip.Settings.Speaker.Hint"),
+        type: String,
+        restricted: true
+    })
+
+    game.settings.register(MODULE_ID, "Message", {
+        scope: "world",
+        config: "false",
+        requiresReload: false,
+        type: String,
+        default: `
+            <p style="text-align:center">Ip dip sky blue,<br>
+            Granny sitting on the loo,<br>
+            Doing farts, playing darts,<br>
+            Lady Luck be with...  <em><strong>YOU</strong></em>?</p>
+            `
+    })
+
+    game.settings.registerMenu(MODULE_ID, "MessageMenu", {
+        name: game.i18n.localize("IpDip.Settings.Message.Name"),
+        label: game.i18n.localize("IpDip.Settings.Message.Label"),
+        hint: game.i18n.localize("IpDip.Settings.Message.Hint"),
+        type: String,
+        restricted: true
+    })
+})
