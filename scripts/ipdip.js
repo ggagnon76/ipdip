@@ -620,6 +620,43 @@ Hooks.once('ready', function() {
     ui.chat.element.find("a.chat-flush").click(flushChatLog);
 });
 
+/** Form application that will be invoked by the settings menu to select a default folder to save images
+*/
+export class IPDIP_FormApp extends FormApplication {
+    constructor() {
+      super();
+      
+    }
+  
+    static get defaultOptions() {
+      return mergeObject(super.defaultOptions, {
+        width: 500,
+        template: `./modules/${ModuleName}/templates/ipdip-settings-menu.hbs`,
+        id: "ipdip-settings",
+        title: game.i18n.localize('ip.Settings.Name'),
+        submitOnChange: true,
+        closeOnSubmit: false
+      })
+    }
+  
+    getData() {
+  
+      return {
+        speaker: game.settings.get(ModuleName, "Speaker"),
+        message: game.settings.get(ModuleName, "Message")
+      }
+    }
+  
+    async _updateObject(event, formData) {
+
+        if ( event.type === "submit") {
+            game.settings.set(ModuleName, "Speaker", formData["ipdip-speaker"]);
+            game.settings.set(ModuleName, "Message", formData["ipdip-message"]);
+            this.close()
+        }
+    }
+}
+
 // World settings to allow the end user to customize the chat card Speaker and the chat card message
 Hooks.once('init', () => {
     game.settings.register(MODULE_ID, "Speaker", {
@@ -628,14 +665,6 @@ Hooks.once('init', () => {
         requiresReload: false,
         type: String,
         default: "Lady Luck"
-    })
-
-    game.settings.registerMenu(MODULE_ID, "SpeakerMenu", {
-        name: game.i18n.localize("IpDip.Settings.Speaker.Name"),
-        label: game.i18n.localize("IpDip.Settings.Speaker.Label"),
-        hint: game.i18n.localize("IpDip.Settings.Speaker.Hint"),
-        type: String,
-        restricted: true
     })
 
     game.settings.register(MODULE_ID, "Message", {
@@ -651,11 +680,11 @@ Hooks.once('init', () => {
             `
     })
 
-    game.settings.registerMenu(MODULE_ID, "MessageMenu", {
-        name: game.i18n.localize("IpDip.Settings.Message.Name"),
-        label: game.i18n.localize("IpDip.Settings.Message.Label"),
-        hint: game.i18n.localize("IpDip.Settings.Message.Hint"),
-        type: String,
+    game.settings.registerMenu(MODULE_ID, "IpDipSettingsMenu", {
+        name: game.i18n.localize("ip.Settings.Name"),
+        label: game.i18n.localize("ip.Settings.Label"),
+        hint: game.i18n.localize("ip.Settings.Hint"),
+        type: IPDIP_FormApp,
         restricted: true
     })
 })
