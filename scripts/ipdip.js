@@ -3,6 +3,8 @@ const MODULE_ID = "ipdip";
 const SOCKET_MODULE_NAME = "module." + MODULE_ID;
 const MARKER_SRC = "modules/ipdip/assets/Marker.png";
 const CROSSHAIR_SRC = "modules/ipdip/assets/Crosshairs.png";
+// Save the core canvas callback function so we can replace it later.
+const callbackHolder = canvas.mouseInteractionManager.callbacks.clickLeft;
 
 /** Condition tracking variables */
 let isSpawned = false;
@@ -10,6 +12,11 @@ let markerCounter = 1;
 let markerArr = [];
 let wheelHookId = null;
 let stageScale = null;
+
+/** Core Token callback function so we can replace them later */
+let tokenLeftClickHolder = null;
+/** Core DoorControl eventHandler so we can replace them later */
+let doorControlHolder = null;
 
 // Create a PIXI container to add the markers into
 const container = new PIXI.Container();
@@ -102,16 +109,26 @@ function message_handler(request) {
     }
 }
 
-/** ********************************************************************************************** */
-/** Extend Dialog class to be able to perform extra operations on header button close (or ESC key) */
-/** ********************************************************************************************** */
-
 /**
+ * Resets canvas, token and wall controllers
  * Removes PIXI Container from canvas.stage
  * Deletes individual markers and their PIXI instances
  * Resets individual variables used to track marker info
  */
 function cleanUp() {
+    // Reset the callback function for canvas left click
+    canvas.mouseInteractionManager.callbacks.clickLeft = callbackHolder;
+    // Reset the callback function for the token(s) left click
+    for (const token of canvas.tokens.placeables) {
+        token.mouseInteractionManager.callbacks.clickLeft = tokenLeftClickHolder;
+    }
+    // Reset the eventHandlers for the doorControls left click
+    for (const wall of canvas.walls.doors) {
+        wall.doorControl.off("mousedown").on("mousedown", doorControlHolder);
+    }
+    tokenLeftClickHolder = null;
+    doorControlHolder = null;
+
     canvas.stage.removeChild(container);
     const childrenArr = container.removeChildren();
     for (const child of childrenArr) {
@@ -124,6 +141,10 @@ function cleanUp() {
     stageScale = null;
     isSpawned = false;
 }
+
+/** ********************************************************************************************** */
+/** Extend Dialog class to be able to perform extra operations on header button close (or ESC key) */
+/** ********************************************************************************************** */
 
 class IpDipDialog extends Dialog {
     constructor(data, options={}) {
@@ -167,12 +188,9 @@ async function spawnDialog() {
         canvas["tokens"].activate();
     }
 
-    // Save the core canvas callback function so we can replace it later.
-    const callbackHolder = canvas.mouseInteractionManager.callbacks.clickLeft;
-    // Save core Token callback function so we can replace them later
-    const tokenLeftClickHolder = canvas.tokens.placeables.length ? canvas.tokens.placeables[0].mouseInteractionManager.callbacks.clickLeft : null;
-    // Save core DoorControl eventHandler so we can replace them later
-    const doorControlHolder = canvas.walls.doors[0]?.doorControl._onMouseDown;
+    // Define holders in this dialog in case tokens or doors were added to canvas after the module initialized
+    tokenLeftClickHolder = canvas.tokens.placeables.length ? canvas.tokens.placeables[0].mouseInteractionManager.callbacks.clickLeft : null;
+    doorControlHolder = canvas.walls.doors.length ? canvas.walls.doors[0].doorControl._onMouseDown : null;
 
     // Add the container to the stage (for all clients)
     socketWrapper(socketDict.injectContainer);
@@ -210,17 +228,6 @@ async function spawnDialog() {
                 }
             }).render(true);
     });
-
-    // Reset the callback function for canvas left click
-    canvas.mouseInteractionManager.callbacks.clickLeft = callbackHolder;
-    // Reset the callback function for the token(s) left click
-    for (const token of canvas.tokens.placeables) {
-        token.mouseInteractionManager.callbacks.clickLeft = tokenLeftClickHolder;
-    }
-    // Reset the eventHandlers for the doorControls left click
-    for (const wall of canvas.walls.doors) {
-        wall.doorControl.off("mousedown").on("mousedown", doorControlHolder);
-    }
 
     // If the user canceled or closed the dialog without submitting, or clicked submit without placing a marker...
     if ( !result || !markerArr.length ) {
@@ -625,7 +632,6 @@ Hooks.once('ready', function() {
 export class IPDIP_FormApp extends FormApplication {
     constructor() {
       super();
-      
     }
   
     static get defaultOptions() {
