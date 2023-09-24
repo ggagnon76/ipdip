@@ -677,7 +677,7 @@ Hooks.once('init', () => {
 
     game.settings.register(MODULE_ID, "Message", {
         scope: "world",
-        config: "false",
+        config: false,
         requiresReload: false,
         type: String,
         default: `<p style="text-align:center">Ip dip sky blue,<br>Granny sitting on the loo,<br>Doing farts, playing darts,<br>Lady Luck be with...  <em><strong>YOU</strong></em>?</p>`
