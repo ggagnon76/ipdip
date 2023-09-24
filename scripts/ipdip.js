@@ -3,8 +3,6 @@ const MODULE_ID = "ipdip";
 const SOCKET_MODULE_NAME = "module." + MODULE_ID;
 const MARKER_SRC = "modules/ipdip/assets/Marker.png";
 const CROSSHAIR_SRC = "modules/ipdip/assets/Crosshairs.png";
-// Save the core canvas callback function so we can replace it later.
-const callbackHolder = canvas.mouseInteractionManager.callbacks.clickLeft;
 
 /** Condition tracking variables */
 let isSpawned = false;
@@ -13,6 +11,8 @@ let markerArr = [];
 let wheelHookId = null;
 let stageScale = null;
 
+/** Save the core canvas callback function so we can replace it later. */
+let callbackHolder = null;
 /** Core Token callback function so we can replace them later */
 let tokenLeftClickHolder = null;
 /** Core DoorControl eventHandler so we can replace them later */
@@ -417,7 +417,7 @@ async function newLocalChatMessage(texture, id) {
         <div id="ipdip-img" data-ipdip="${id}" style="width:100%"><img src="${texture}" object-fit="contain" /></div>
     `;
     const chatData = {
-        speaker: {Speaker: game.settings.get(MODULE_ID, "Speaker")},
+        speaker: {alias: game.settings.get(MODULE_ID, "Speaker")},
         content: content
     };
     const message = new ChatMessage(chatData)
@@ -625,6 +625,9 @@ Hooks.once('ready', function() {
     // Replace chat log flush eventListener
     ui.chat.element.find("a.chat-flush").unbind("click");
     ui.chat.element.find("a.chat-flush").click(flushChatLog);
+
+    // Define the callbackHolder
+    callbackHolder = canvas.mouseInteractionManager.callbacks.clickLeft
 });
 
 /** Form application that will be invoked by the settings menu to select a default folder to save images
@@ -637,27 +640,26 @@ export class IPDIP_FormApp extends FormApplication {
     static get defaultOptions() {
       return mergeObject(super.defaultOptions, {
         width: 500,
-        template: `./modules/${ModuleName}/templates/ipdip-settings-menu.hbs`,
+        template: `./modules/${MODULE_ID}/templates/ipdip-settings-menu.hbs`,
         id: "ipdip-settings",
-        title: game.i18n.localize('ip.Settings.Name'),
+        title: game.i18n.localize('IpDip.Settings.Name'),
         submitOnChange: true,
         closeOnSubmit: false
       })
     }
   
     getData() {
-  
       return {
-        speaker: game.settings.get(ModuleName, "Speaker"),
-        message: game.settings.get(ModuleName, "Message")
+        speaker: game.settings.get(MODULE_ID, "Speaker"),
+        message: game.settings.get(MODULE_ID, "Message")
       }
     }
   
     async _updateObject(event, formData) {
 
         if ( event.type === "submit") {
-            game.settings.set(ModuleName, "Speaker", formData["ipdip-speaker"]);
-            game.settings.set(ModuleName, "Message", formData["ipdip-message"]);
+            game.settings.set(MODULE_ID, "Speaker", formData["ipdip-speaker"]);
+            game.settings.set(MODULE_ID, "Message", formData["ipdip-message"]);
             this.close()
         }
     }
@@ -678,18 +680,13 @@ Hooks.once('init', () => {
         config: "false",
         requiresReload: false,
         type: String,
-        default: `
-            <p style="text-align:center">Ip dip sky blue,<br>
-            Granny sitting on the loo,<br>
-            Doing farts, playing darts,<br>
-            Lady Luck be with...  <em><strong>YOU</strong></em>?</p>
-            `
+        default: `<p style="text-align:center">Ip dip sky blue,<br>Granny sitting on the loo,<br>Doing farts, playing darts,<br>Lady Luck be with...  <em><strong>YOU</strong></em>?</p>`
     })
 
     game.settings.registerMenu(MODULE_ID, "IpDipSettingsMenu", {
-        name: game.i18n.localize("ip.Settings.Name"),
-        label: game.i18n.localize("ip.Settings.Label"),
-        hint: game.i18n.localize("ip.Settings.Hint"),
+        name: game.i18n.localize("IpDip.Settings.Name"),
+        label: game.i18n.localize("IpDip.Settings.Label"),
+        hint: game.i18n.localize("IpDip.Settings.Hint"),
         type: IPDIP_FormApp,
         restricted: true
     })

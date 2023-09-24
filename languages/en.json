@@ -14,7 +14,7 @@
         },
         "Settings" : {
             "Name" : "IpDip Settings Menu",
-            "Label" : "Menu for chat card settings",
+            "Label" : "Chat Card Settings Menu",
             "Hint" : "Modify contents to change chat card output",
             "speaker" : {
                 "Name" : "Speaker",
