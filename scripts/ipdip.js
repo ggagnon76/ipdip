@@ -116,18 +116,21 @@ function message_handler(request) {
  * Resets individual variables used to track marker info
  */
 function cleanUp() {
-    // Reset the callback function for canvas left click
-    canvas.mouseInteractionManager.callbacks.clickLeft = callbackHolder;
-    // Reset the callback function for the token(s) left click
-    for (const token of canvas.tokens.placeables) {
-        token.mouseInteractionManager.callbacks.clickLeft = tokenLeftClickHolder;
+
+    if ( game.user.isGM ) {
+        // Reset the callback function for canvas left click
+        canvas.mouseInteractionManager.callbacks.clickLeft = callbackHolder;
+        // Reset the callback function for the token(s) left click
+        for (const token of canvas.tokens.placeables) {
+            token.mouseInteractionManager.callbacks.clickLeft = tokenLeftClickHolder;
+        }
+        // Reset the eventHandlers for the doorControls left click
+        for (const wall of canvas.walls.doors) {
+            wall.doorControl.off("mousedown").on("mousedown", doorControlHolder);
+        }
+        tokenLeftClickHolder = null;
+        doorControlHolder = null;
     }
-    // Reset the eventHandlers for the doorControls left click
-    for (const wall of canvas.walls.doors) {
-        wall.doorControl.off("mousedown").on("mousedown", doorControlHolder);
-    }
-    tokenLeftClickHolder = null;
-    doorControlHolder = null;
 
     canvas.stage.removeChild(container);
     const childrenArr = container.removeChildren();
