@@ -117,21 +117,6 @@ function message_handler(request) {
  */
 function cleanUp() {
 
-    if ( game.user.isGM ) {
-        // Reset the callback function for canvas left click
-        canvas.mouseInteractionManager.callbacks.clickLeft = callbackHolder;
-        // Reset the callback function for the token(s) left click
-        for (const token of canvas.tokens.placeables) {
-            token.mouseInteractionManager.callbacks.clickLeft = tokenLeftClickHolder;
-        }
-        // Reset the eventHandlers for the doorControls left click
-        for (const wall of canvas.walls.doors) {
-            wall.doorControl.off("mousedown").on("mousedown", doorControlHolder);
-        }
-        tokenLeftClickHolder = null;
-        doorControlHolder = null;
-    }
-
     canvas.stage.removeChild(container);
     const childrenArr = container.removeChildren();
     for (const child of childrenArr) {
@@ -232,6 +217,18 @@ async function spawnDialog() {
             }).render(true);
     });
 
+    // Reset the callback function for canvas left click
+    canvas.mouseInteractionManager.callbacks.clickLeft = callbackHolder;
+    // Reset the callback function for the token(s) left click
+    for (const token of canvas.tokens.placeables) {
+        token.mouseInteractionManager.callbacks.clickLeft = tokenLeftClickHolder;
+    }
+    // Reset the eventHandlers for the doorControls left click
+    for (const wall of canvas.walls.doors) {
+        wall.doorControl.off("mousedown").on("mousedown", doorControlHolder);
+    }
+    tokenLeftClickHolder = null;
+    doorControlHolder = null;
     isSpawned = false;
 
     // If the user canceled or closed the dialog without submitting, or clicked submit without placing a marker...
