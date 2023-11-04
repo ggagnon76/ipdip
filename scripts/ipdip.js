@@ -37,7 +37,7 @@ const socketDict = {
     flushIpDipChatLog: "flushIpDipChatLog"
 }
 
-/* Function used fire a function locally for the GM and on clients via socket */
+/* Function used to fire a function locally for the GM and on clients via socket */
 function socketWrapper(requestID, data=null) {
     switch(requestID) {
         case socketDict.injectContainer:
@@ -231,6 +231,8 @@ async function spawnDialog() {
                 }
             }).render(true);
     });
+
+    isSpawned = false;
 
     // If the user canceled or closed the dialog without submitting, or clicked submit without placing a marker...
     if ( !result || !markerArr.length ) {
@@ -429,6 +431,9 @@ async function newLocalChatMessage(texture, id) {
 
 /* Create a new marker and place it on the game canvas at the mouse pointer */
 async function newMarker(id, x, y) {
+
+    if( !isSpawned ) return;
+
     const marker = new PIXI.Container;
     // Load up the marker texture
     marker.sprite = new PIXI.Sprite(await loadTexture(MARKER_SRC));
