@@ -429,8 +429,6 @@ async function newLocalChatMessage(texture, id) {
 /* Create a new marker and place it on the game canvas at the mouse pointer */
 async function newMarker(id, x, y) {
 
-    if( !isSpawned ) return;
-
     const marker = new PIXI.Container;
     // Load up the marker texture
     marker.sprite = new PIXI.Sprite(await loadTexture(MARKER_SRC));
@@ -506,6 +504,7 @@ const debounceCanvasLeftClick = foundry.utils.debounce( (event) => {
 
 /*  Left Click logic.  Replaces the event listeners for the canvas and individual tokens */
 async function _canvasLeftClick(event) {
+    if( !isSpawned ) return;
     debounceCanvasLeftClick(event);    
 }
 
