@@ -24,7 +24,9 @@
     "scripts/ipdip.js"
   ],
   "scripts": [],
-  "styles": [],
+  "styles": [
+    "/styles/module.css"
+  ],
   "languages": [
     {
       "lang" : "en",

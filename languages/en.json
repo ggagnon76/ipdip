@@ -11,6 +11,22 @@
             "No" : "No",
             "Choose" : "Ip Dip",
             "Cancel" : "Cancel"
+        },
+        "Settings" : {
+            "Name" : "IpDip Settings Menu",
+            "Label" : "Chat Card Settings Menu",
+            "Hint" : "Modify contents to change chat card output",
+            "speaker" : {
+                "Name" : "Speaker",
+                "Label" : "Speaker",
+                "Hint": "Chat Card speaker"
+            },
+            "Message" : {
+                "Name" : "Chat Card Message",
+                "Label" : "Message",
+                "Hint": "Format this message in HTML.  Place HTML between ticks: `HTML HERE`"
+            }
+            
         }
     }
 }

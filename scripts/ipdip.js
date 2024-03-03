@@ -11,6 +11,13 @@ let markerArr = [];
 let wheelHookId = null;
 let stageScale = null;
 
+/** Save the core canvas callback function so we can replace it later. */
+let callbackHolder = null;
+/** Core Token callback function so we can replace them later */
+let tokenLeftClickHolder = null;
+/** Core DoorControl eventHandler so we can replace them later */
+let doorControlHolder = null;
+
 // Create a PIXI container to add the markers into
 const container = new PIXI.Container();
 
@@ -30,7 +37,7 @@ const socketDict = {
     flushIpDipChatLog: "flushIpDipChatLog"
 }
 
-/* Function used fire a function locally for the GM and on clients via socket */
+/* Function used to fire a function locally for the GM and on clients via socket */
 function socketWrapper(requestID, data=null) {
     switch(requestID) {
         case socketDict.injectContainer:
@@ -102,16 +109,14 @@ function message_handler(request) {
     }
 }
 
-/** ********************************************************************************************** */
-/** Extend Dialog class to be able to perform extra operations on header button close (or ESC key) */
-/** ********************************************************************************************** */
-
 /**
+ * Resets canvas, token and wall controllers
  * Removes PIXI Container from canvas.stage
  * Deletes individual markers and their PIXI instances
  * Resets individual variables used to track marker info
  */
 function cleanUp() {
+
     canvas.stage.removeChild(container);
     const childrenArr = container.removeChildren();
     for (const child of childrenArr) {
@@ -124,6 +129,10 @@ function cleanUp() {
     stageScale = null;
     isSpawned = false;
 }
+
+/** ********************************************************************************************** */
+/** Extend Dialog class to be able to perform extra operations on header button close (or ESC key) */
+/** ********************************************************************************************** */
 
 class IpDipDialog extends Dialog {
     constructor(data, options={}) {
@@ -167,12 +176,9 @@ async function spawnDialog() {
         canvas["tokens"].activate();
     }
 
-    // Save the core canvas callback function so we can replace it later.
-    const callbackHolder = canvas.mouseInteractionManager.callbacks.clickLeft;
-    // Save core Token callback function so we can replace them later
-    const tokenLeftClickHolder = canvas.tokens.placeables.length ? canvas.tokens.placeables[0].mouseInteractionManager.callbacks.clickLeft : null;
-    // Save core DoorControl eventHandler so we can replace them later
-    const doorControlHolder = canvas.walls.doors[0]?.doorControl._onMouseDown;
+    // Define holders in this dialog in case tokens or doors were added to canvas after the module initialized
+    tokenLeftClickHolder = canvas.tokens.placeables.length ? canvas.tokens.placeables[0].mouseInteractionManager.callbacks.clickLeft : null;
+    doorControlHolder = canvas.walls.doors.length ? canvas.walls.doors[0].doorControl._onMouseDown : null;
 
     // Add the container to the stage (for all clients)
     socketWrapper(socketDict.injectContainer);
@@ -221,6 +227,9 @@ async function spawnDialog() {
     for (const wall of canvas.walls.doors) {
         wall.doorControl.off("mousedown").on("mousedown", doorControlHolder);
     }
+    tokenLeftClickHolder = null;
+    doorControlHolder = null;
+    isSpawned = false;
 
     // If the user canceled or closed the dialog without submitting, or clicked submit without placing a marker...
     if ( !result || !markerArr.length ) {
@@ -406,15 +415,11 @@ function removeContainerHandlers() {
 /* Generate the data for a local only (not in database) chat message for the ChatLog, that includes an image of the winning marker */
 async function newLocalChatMessage(texture, id) {
 
-    const content = `
-        <p style="text-align:center">Ip dip sky blue,<br>
-        Granny sitting on the loo,<br>
-        Doing farts, playing darts,<br>
-        Lady Luck be with...  <em><strong>YOU</strong></em>?</p>
+    const content = game.settings.get(MODULE_ID, "Message") + `
         <div id="ipdip-img" data-ipdip="${id}" style="width:100%"><img src="${texture}" object-fit="contain" /></div>
     `;
     const chatData = {
-        speaker: {alias: "Lady Luck"},
+        speaker: {alias: game.settings.get(MODULE_ID, "Speaker")},
         content: content
     };
     const message = new ChatMessage(chatData)
@@ -423,6 +428,7 @@ async function newLocalChatMessage(texture, id) {
 
 /* Create a new marker and place it on the game canvas at the mouse pointer */
 async function newMarker(id, x, y) {
+
     const marker = new PIXI.Container;
     // Load up the marker texture
     marker.sprite = new PIXI.Sprite(await loadTexture(MARKER_SRC));
@@ -498,6 +504,7 @@ const debounceCanvasLeftClick = foundry.utils.debounce( (event) => {
 
 /*  Left Click logic.  Replaces the event listeners for the canvas and individual tokens */
 async function _canvasLeftClick(event) {
+    if( !isSpawned ) return;
     debounceCanvasLeftClick(event);    
 }
 
@@ -622,4 +629,69 @@ Hooks.once('ready', function() {
     // Replace chat log flush eventListener
     ui.chat.element.find("a.chat-flush").unbind("click");
     ui.chat.element.find("a.chat-flush").click(flushChatLog);
+
+    // Define the callbackHolder
+    callbackHolder = canvas.mouseInteractionManager.callbacks.clickLeft
 });
+
+/** Form application that will be invoked by the settings menu to select a default folder to save images
+*/
+export class IPDIP_FormApp extends FormApplication {
+    constructor() {
+      super();
+    }
+  
+    static get defaultOptions() {
+      return mergeObject(super.defaultOptions, {
+        width: 500,
+        template: `./modules/${MODULE_ID}/templates/ipdip-settings-menu.hbs`,
+        id: "ipdip-settings",
+        title: game.i18n.localize('IpDip.Settings.Name'),
+        submitOnChange: true,
+        closeOnSubmit: false
+      })
+    }
+  
+    getData() {
+      return {
+        speaker: game.settings.get(MODULE_ID, "Speaker"),
+        message: game.settings.get(MODULE_ID, "Message")
+      }
+    }
+  
+    async _updateObject(event, formData) {
+
+        if ( event.type === "submit") {
+            game.settings.set(MODULE_ID, "Speaker", formData["ipdip-speaker"]);
+            game.settings.set(MODULE_ID, "Message", formData["ipdip-message"]);
+            this.close()
+        }
+    }
+}
+
+// World settings to allow the end user to customize the chat card Speaker and the chat card message
+Hooks.once('init', () => {
+    game.settings.register(MODULE_ID, "Speaker", {
+        scope: "world",
+        config: false,
+        requiresReload: false,
+        type: String,
+        default: "Lady Luck"
+    })
+
+    game.settings.register(MODULE_ID, "Message", {
+        scope: "world",
+        config: false,
+        requiresReload: false,
+        type: String,
+        default: `<p style="text-align:center">Ip dip sky blue,<br>Granny sitting on the loo,<br>Doing farts, playing darts,<br>Lady Luck be with...  <em><strong>YOU</strong></em>?</p>`
+    })
+
+    game.settings.registerMenu(MODULE_ID, "IpDipSettingsMenu", {
+        name: game.i18n.localize("IpDip.Settings.Name"),
+        label: game.i18n.localize("IpDip.Settings.Label"),
+        hint: game.i18n.localize("IpDip.Settings.Hint"),
+        type: IPDIP_FormApp,
+        restricted: true
+    })
+})
