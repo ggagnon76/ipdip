@@ -11,8 +11,10 @@ let markerArr = [];
 let wheelHookId = null;
 let stageScale = null;
 
-/** Save the core canvas callback function so we can replace it later. */
-let callbackHolder = null;
+/** Save the core canvas leftclick callback function so we can replace it later. */
+let canvasLeftClickHolder = null;
+/** Save the core canvas drag callback function so we can replace it later. */
+let canvasdragHolder = null;
 /** Core Token callback function so we can replace them later */
 let tokenLeftClickHolder = null;
 /** Core DoorControl eventHandler so we can replace them later */
@@ -120,7 +122,7 @@ function cleanUp() {
     canvas.stage.removeChild(container);
     const childrenArr = container.removeChildren();
     for (const child of childrenArr) {
-        child.destroy({children: true, texture: true});
+        child.destroy({children: true});
     }
     markerArr = [];
     markerCounter = 1;
@@ -186,13 +188,15 @@ async function spawnDialog() {
     const canvasLeftClick = _canvasLeftClick.bind(canvas);
     // Swap the callback so a left click on the canvas now does what Ip Dip wants it to do
     canvas.mouseInteractionManager.callbacks.clickLeft = canvasLeftClick;
+    // Swap the callback so a left drag on the canvs does nothing
+    canvas.mouseInteractionManager.callbacks.dragLeftStart = null;
     // Swap the callback for each token so it drops a marker instead of selecting the token(s)
     for (const token of canvas.tokens.placeables) {
         token.mouseInteractionManager.callbacks.clickLeft = canvasLeftClick;
     }
     // Swap the eventHandler for doorControl _onMouseDown
     for (const wall of canvas.walls.doors) {
-        wall.doorControl.off("mousedown").on("mousedown", () => {});
+        wall.doorControl.off("pointerdown").on("pointerdown", canvasLeftClick);
     }
 
     // Spawn the dialog then wait for user to submit, cancel or close before continuing.
@@ -218,14 +222,16 @@ async function spawnDialog() {
     });
 
     // Reset the callback function for canvas left click
-    canvas.mouseInteractionManager.callbacks.clickLeft = callbackHolder;
+    canvas.mouseInteractionManager.callbacks.clickLeft = canvasLeftClickHolder;
+    // Reset the callback function for canvas drag
+    canvas.mouseInteractionManager.callbacks.dragLeftStart = canvasdragHolder;
     // Reset the callback function for the token(s) left click
     for (const token of canvas.tokens.placeables) {
         token.mouseInteractionManager.callbacks.clickLeft = tokenLeftClickHolder;
     }
     // Reset the eventHandlers for the doorControls left click
     for (const wall of canvas.walls.doors) {
-        wall.doorControl.off("mousedown").on("mousedown", doorControlHolder);
+        wall.doorControl.off("pointerdown").on("pointerdown", doorControlHolder);
     }
     tokenLeftClickHolder = null;
     doorControlHolder = null;
@@ -388,7 +394,7 @@ async function selectionInCrosshairsPic() {
 
     const image = await canvas.app.renderer.extract.base64(texture, "image/webp");
 
-    crosshairSprite.destroy(true);
+    PIXI.Assets.unload(CROSSHAIR_SRC);
 
     return image
 }
@@ -469,10 +475,11 @@ function updateProbabilities(id, multiplier) {
 
 /* Work-around (hax?) to get around PIXI events anomaly (clicking on a token produces 2 click events) */
 const debounceCanvasLeftClick = foundry.utils.debounce( (event) => {
-    socketWrapper(socketDict.newMarker, [markerCounter, event.interactionData.origin.x, event.interactionData.origin.y]);
+    socketWrapper(socketDict.newMarker, [markerCounter, canvas.mousePosition.x, canvas.mousePosition.y]);
 
     stageScale = canvas.stage.scale.x;
     if ( wheelHookId === null ) {
+        // Scroll Wheel functionality for markers.
         wheelHookId = Hooks.on('canvasPan', (canvas, data) => {
 
             const multiplier = data.scale < stageScale ? -1 : 1
@@ -502,7 +509,7 @@ const debounceCanvasLeftClick = foundry.utils.debounce( (event) => {
     }
 }, 100);
 
-/*  Left Click logic.  Replaces the event listeners for the canvas and individual tokens */
+/*  Left Click logic for canvas or tokens.  Replaces event listeners */
 async function _canvasLeftClick(event) {
     if( !isSpawned ) return;
     debounceCanvasLeftClick(event);    
@@ -630,8 +637,11 @@ Hooks.once('ready', function() {
     ui.chat.element.find("a.chat-flush").unbind("click");
     ui.chat.element.find("a.chat-flush").click(flushChatLog);
 
-    // Define the callbackHolder
-    callbackHolder = canvas.mouseInteractionManager.callbacks.clickLeft
+    // Define the canvasLeftClickHolder
+    canvasLeftClickHolder = canvas.mouseInteractionManager.callbacks.clickLeft
+
+    // Define the canvasdragHolder
+    canvasdragHolder = canvas.mouseInteractionManager.callbacks.dragLeftStart
 });
 
 /** Form application that will be invoked by the settings menu to select a default folder to save images
