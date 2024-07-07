@@ -11,8 +11,10 @@ let markerArr = [];
 let wheelHookId = null;
 let stageScale = null;
 
-/** Save the core canvas callback function so we can replace it later. */
-let callbackHolder = null;
+/** Save the core canvas leftclick callback function so we can replace it later. */
+let canvasLeftClickHolder = null;
+/** Save the core canvas drag callback function so we can replace it later. */
+let canvasdragHolder = null;
 /** Core Token callback function so we can replace them later */
 let tokenLeftClickHolder = null;
 /** Core DoorControl eventHandler so we can replace them later */
@@ -186,6 +188,8 @@ async function spawnDialog() {
     const canvasLeftClick = _canvasLeftClick.bind(canvas);
     // Swap the callback so a left click on the canvas now does what Ip Dip wants it to do
     canvas.mouseInteractionManager.callbacks.clickLeft = canvasLeftClick;
+    // Swap the callback so a left drag on the canvs does nothing
+    canvas.mouseInteractionManager.callbacks.dragLeftStart = null;
     // Swap the callback for each token so it drops a marker instead of selecting the token(s)
     for (const token of canvas.tokens.placeables) {
         token.mouseInteractionManager.callbacks.clickLeft = canvasLeftClick;
@@ -218,7 +222,9 @@ async function spawnDialog() {
     });
 
     // Reset the callback function for canvas left click
-    canvas.mouseInteractionManager.callbacks.clickLeft = callbackHolder;
+    canvas.mouseInteractionManager.callbacks.clickLeft = canvasLeftClickHolder;
+    // Reset the callback function for canvas drag
+    canvas.mouseInteractionManager.callbacks.dragLeftStart = canvasdragHolder;
     // Reset the callback function for the token(s) left click
     for (const token of canvas.tokens.placeables) {
         token.mouseInteractionManager.callbacks.clickLeft = tokenLeftClickHolder;
@@ -630,8 +636,11 @@ Hooks.once('ready', function() {
     ui.chat.element.find("a.chat-flush").unbind("click");
     ui.chat.element.find("a.chat-flush").click(flushChatLog);
 
-    // Define the callbackHolder
-    callbackHolder = canvas.mouseInteractionManager.callbacks.clickLeft
+    // Define the canvasLeftClickHolder
+    canvasLeftClickHolder = canvas.mouseInteractionManager.callbacks.clickLeft
+
+    // Define the canvasdragHolder
+    canvasdragHolder = canvas.mouseInteractionManager.callbacks.dragLeftStart
 });
 
 /** Form application that will be invoked by the settings menu to select a default folder to save images
