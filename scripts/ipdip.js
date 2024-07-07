@@ -122,7 +122,7 @@ function cleanUp() {
     canvas.stage.removeChild(container);
     const childrenArr = container.removeChildren();
     for (const child of childrenArr) {
-        child.destroy({children: true, texture: true});
+        child.destroy({children: true});
     }
     markerArr = [];
     markerCounter = 1;
@@ -196,7 +196,7 @@ async function spawnDialog() {
     }
     // Swap the eventHandler for doorControl _onMouseDown
     for (const wall of canvas.walls.doors) {
-        wall.doorControl.off("mousedown").on("mousedown", () => {});
+        wall.doorControl.off("pointerdown").on("pointerdown", canvasLeftClick);
     }
 
     // Spawn the dialog then wait for user to submit, cancel or close before continuing.
@@ -231,7 +231,7 @@ async function spawnDialog() {
     }
     // Reset the eventHandlers for the doorControls left click
     for (const wall of canvas.walls.doors) {
-        wall.doorControl.off("mousedown").on("mousedown", doorControlHolder);
+        wall.doorControl.off("pointerdown").on("pointerdown", doorControlHolder);
     }
     tokenLeftClickHolder = null;
     doorControlHolder = null;
@@ -394,7 +394,7 @@ async function selectionInCrosshairsPic() {
 
     const image = await canvas.app.renderer.extract.base64(texture, "image/webp");
 
-    crosshairSprite.destroy(true);
+    PIXI.Assets.unload(CROSSHAIR_SRC);
 
     return image
 }
@@ -475,10 +475,11 @@ function updateProbabilities(id, multiplier) {
 
 /* Work-around (hax?) to get around PIXI events anomaly (clicking on a token produces 2 click events) */
 const debounceCanvasLeftClick = foundry.utils.debounce( (event) => {
-    socketWrapper(socketDict.newMarker, [markerCounter, event.interactionData.origin.x, event.interactionData.origin.y]);
+    socketWrapper(socketDict.newMarker, [markerCounter, canvas.mousePosition.x, canvas.mousePosition.y]);
 
     stageScale = canvas.stage.scale.x;
     if ( wheelHookId === null ) {
+        // Scroll Wheel functionality for markers.
         wheelHookId = Hooks.on('canvasPan', (canvas, data) => {
 
             const multiplier = data.scale < stageScale ? -1 : 1
@@ -508,7 +509,7 @@ const debounceCanvasLeftClick = foundry.utils.debounce( (event) => {
     }
 }, 100);
 
-/*  Left Click logic.  Replaces the event listeners for the canvas and individual tokens */
+/*  Left Click logic for canvas or tokens.  Replaces event listeners */
 async function _canvasLeftClick(event) {
     if( !isSpawned ) return;
     debounceCanvasLeftClick(event);    
