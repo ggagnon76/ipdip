@@ -103,10 +103,10 @@ function message_handler(request) {
 }
 
 /**
- * Resets canvas, token and wall controllers
  * Removes PIXI Container from canvas.stage
  * Deletes individual markers and their PIXI instances
  * Resets individual variables used to track marker info
+ * Resets to Token Layer
  */
 function cleanUp() {
 
@@ -155,6 +155,7 @@ class IpDipDialog extends Dialog {
     }
 }
 
+/** Create a unique drawing layer for IpDip to be able to drop markers without triggering mouse events on other layers */
 class IpDipDrawingsLayer extends DrawingsLayer {
     
     static get layerOptions() {
@@ -207,7 +208,7 @@ class IpDipDrawingsLayer extends DrawingsLayer {
             }
             return;
         }
-        super._onClickLeft(event);
+        //super._onClickLeft(event);
     }
 }
 
@@ -606,7 +607,7 @@ Hooks.once('ready', function() {
     // The remainder is only applicable to GM accounts.
     if ( !game.user.isGM )  return;
 
-    // Expose the spawnDialog function so users can make a macro instead of using the keybinding.
+    // Expose the spawnDialog function so GM can make a macro instead of using the keybinding.
     game.modules.get(MODULE_ID).spawnDialog = () => spawnDialog();
 
     // Emit the cleanUp() function to clients in case the DM refreshed browser while the dialog was unfinished.
