@@ -11,15 +11,6 @@ let markerArr = [];
 let wheelHookId = null;
 let stageScale = null;
 
-/** Save the core canvas leftclick callback function so we can replace it later. */
-let canvasLeftClickHolder = null;
-/** Save the core canvas drag callback function so we can replace it later. */
-let canvasdragHolder = null;
-/** Core Token callback function so we can replace them later */
-let tokenLeftClickHolder = null;
-/** Core DoorControl eventHandler so we can replace them later */
-let doorControlHolder = null;
-
 // Create a PIXI container to add the markers into
 const container = new PIXI.Container();
 
@@ -35,8 +26,7 @@ const socketDict = {
     newMarker : "newMarker",
     removeContainerHandlers : "removeContainerHandlers",
     updateProbabilities : "updateProbabilities",
-    deleteIpDipMessages : "deleteIpDipMessages",
-    flushIpDipChatLog: "flushIpDipChatLog"
+    deleteIpDipMessages : "deleteIpDipMessages"
 }
 
 /* Function used to fire a function locally for the GM and on clients via socket */
@@ -70,10 +60,6 @@ function socketWrapper(requestID, data=null) {
             deleteIpDipMessages(data);
             game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.deleteIpDipMessages, data: data});
             break;
-        case socketDict.flushIpDipChatLog:
-            flushIpDipChatLog();
-            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.flushIpDipChatLog});
-            break;
         default:
             ui.notifications.error(`Socket action ${requestID} was not found in socketWrapper.`);
     }
@@ -103,19 +89,16 @@ function message_handler(request) {
         case socketDict.deleteIpDipMessages:
             deleteIpDipMessages(request.data);
             break;
-        case socketDict.flushIpDipChatLog:
-            flushIpDipChatLog();
-            break;
         default:
             ui.notifications.error(`Function ${request.action} was not found in message_handler.`);
     }
 }
 
 /**
- * Resets canvas, token and wall controllers
  * Removes PIXI Container from canvas.stage
  * Deletes individual markers and their PIXI instances
  * Resets individual variables used to track marker info
+ * Resets to Token Layer
  */
 function cleanUp() {
 
@@ -130,6 +113,7 @@ function cleanUp() {
     wheelHookId = null;
     stageScale = null;
     isSpawned = false;
+    canvas.tokens.activate();
 }
 
 /** ********************************************************************************************** */
@@ -163,6 +147,63 @@ class IpDipDialog extends Dialog {
     }
 }
 
+/** Create a unique drawing layer for IpDip to be able to drop markers without triggering mouse events on other layers */
+class IpDipDrawingsLayer extends DrawingsLayer {
+    
+    static get layerOptions() {
+        return foundry.utils.mergeObject(super.layerOptions, {
+            name: "IpDipMarkers",
+            zIndex: 110
+        });
+    }
+
+    /** override */
+    _activate() {};
+
+    /** override */
+    _deactivate() {};
+
+    // OVERRIDE the _onLeftClick so it drops a marker when IpDip is active
+    _onClickLeft(event) {
+        if (isSpawned) {
+            socketWrapper(socketDict.newMarker, [markerCounter, canvas.mousePosition.x, canvas.mousePosition.y]);
+            stageScale = canvas.stage.scale.x;
+            
+            // Scroll Wheel functionality for markers.
+            if ( wheelHookId === null ) {
+                wheelHookId = Hooks.on('canvasPan', (canvas, data) => {
+
+                    const multiplier = data.scale < stageScale ? -1 : 1
+
+                    const loc = canvas.mousePosition;
+
+                    let targetMarker = undefined;
+                    for (const marker of markerArr) {
+                        if (    loc.x > (marker.container.x - marker.container.width / 2) &&
+                                loc.x < (marker.container.x + marker.container.width / 2) &&
+                                loc.y > (marker.container.y - marker.container.height / 2) &&
+                                loc.y < (marker.container.y + marker.container.height / 2)        
+                        ) {
+                            targetMarker = marker;
+                            socketWrapper(socketDict.updateProbabilities, [marker.id, multiplier]);
+                            canvas.stage.scale.set(stageScale, stageScale);
+                            canvas.updateBlur(stageScale);
+                            return;
+                        }
+                    }
+
+                    if ( targetMarker === undefined ) {
+                        stageScale = data.scale;
+                        return;
+                    }
+                });
+            }
+            return;
+        }
+        //super._onClickLeft(event);
+    }
+}
+
 /** ************************************************************************************************************* */
 /** spawnDialog is the function that is invoked by the keybinding or via macro.  It is the launch point for IpDip */
 /** ************************************************************************************************************* */
@@ -172,32 +213,11 @@ async function spawnDialog() {
     if ( !game.user.isGM || isSpawned ) return;
     isSpawned = true;
 
-    // Just in case, set UI to the Token Layer
-    if ( ui.controls.activeControl !== "token") {
-        ui.controls.activeControl = "token";
-        canvas["tokens"].activate();
-    }
-
-    // Define holders in this dialog in case tokens or doors were added to canvas after the module initialized
-    tokenLeftClickHolder = canvas.tokens.placeables.length ? canvas.tokens.placeables[0].mouseInteractionManager.callbacks.clickLeft : null;
-    doorControlHolder = canvas.walls.doors.length ? canvas.walls.doors[0].doorControl._onMouseDown : null;
+    // Intentionally change to the drawings layer so mouse clicking on the canvas will not activate controls like tokens, doors, etc...
+    canvas.ipdip_layer.activate();
 
     // Add the container to the stage (for all clients)
     socketWrapper(socketDict.injectContainer);
-
-    const canvasLeftClick = _canvasLeftClick.bind(canvas);
-    // Swap the callback so a left click on the canvas now does what Ip Dip wants it to do
-    canvas.mouseInteractionManager.callbacks.clickLeft = canvasLeftClick;
-    // Swap the callback so a left drag on the canvs does nothing
-    canvas.mouseInteractionManager.callbacks.dragLeftStart = null;
-    // Swap the callback for each token so it drops a marker instead of selecting the token(s)
-    for (const token of canvas.tokens.placeables) {
-        token.mouseInteractionManager.callbacks.clickLeft = canvasLeftClick;
-    }
-    // Swap the eventHandler for doorControl _onMouseDown
-    for (const wall of canvas.walls.doors) {
-        wall.doorControl.off("pointerdown").on("pointerdown", canvasLeftClick);
-    }
 
     // Spawn the dialog then wait for user to submit, cancel or close before continuing.
     const result = await new Promise(resolve => {
@@ -221,20 +241,6 @@ async function spawnDialog() {
             }).render(true);
     });
 
-    // Reset the callback function for canvas left click
-    canvas.mouseInteractionManager.callbacks.clickLeft = canvasLeftClickHolder;
-    // Reset the callback function for canvas drag
-    canvas.mouseInteractionManager.callbacks.dragLeftStart = canvasdragHolder;
-    // Reset the callback function for the token(s) left click
-    for (const token of canvas.tokens.placeables) {
-        token.mouseInteractionManager.callbacks.clickLeft = tokenLeftClickHolder;
-    }
-    // Reset the eventHandlers for the doorControls left click
-    for (const wall of canvas.walls.doors) {
-        wall.doorControl.off("pointerdown").on("pointerdown", doorControlHolder);
-    }
-    tokenLeftClickHolder = null;
-    doorControlHolder = null;
     isSpawned = false;
 
     // If the user canceled or closed the dialog without submitting, or clicked submit without placing a marker...
@@ -473,47 +479,6 @@ function updateProbabilities(id, multiplier) {
     recalculateProbabilities();
 }
 
-/* Work-around (hax?) to get around PIXI events anomaly (clicking on a token produces 2 click events) */
-const debounceCanvasLeftClick = foundry.utils.debounce( (event) => {
-    socketWrapper(socketDict.newMarker, [markerCounter, canvas.mousePosition.x, canvas.mousePosition.y]);
-
-    stageScale = canvas.stage.scale.x;
-    if ( wheelHookId === null ) {
-        // Scroll Wheel functionality for markers.
-        wheelHookId = Hooks.on('canvasPan', (canvas, data) => {
-
-            const multiplier = data.scale < stageScale ? -1 : 1
-
-            const loc = canvas.mousePosition;
-
-            let targetMarker = undefined;
-            for (const marker of markerArr) {
-                if (    loc.x > (marker.container.x - marker.container.width / 2) &&
-                        loc.x < (marker.container.x + marker.container.width / 2) &&
-                        loc.y > (marker.container.y - marker.container.height / 2) &&
-                        loc.y < (marker.container.y + marker.container.height / 2)        
-                ) {
-                    targetMarker = marker;
-                    socketWrapper(socketDict.updateProbabilities, [marker.id, multiplier]);
-                    canvas.stage.scale.set(stageScale, stageScale);
-                    canvas.updateBlur(stageScale);
-                    return;
-                }
-            }
-
-            if ( targetMarker === undefined ) {
-                stageScale = data.scale;
-                return;
-            }
-        });
-    }
-}, 100);
-
-/*  Left Click logic for canvas or tokens.  Replaces event listeners */
-async function _canvasLeftClick(event) {
-    if( !isSpawned ) return;
-    debounceCanvasLeftClick(event);    
-}
 
 /* Creates a Rollable Table.  Rolls on the table.  Deletes the table and returns the result */
 async function rollTable(markerArr) {
@@ -550,35 +515,6 @@ function deleteIpDipMessages(id) {
     }
 }
 
-function flushIpDipChatLog() {
-    ui.chat.element.find("#chat-log")[0].innerHTML = "";
-}
-
-/**
- * Custom eventListener for ChatLog flush button
- * @param {object} event 
- */
-async function flushChatLog(event) {
-    event.preventDefault;
-    await game.messages.flush();
-    socketWrapper(socketDict.flushIpDipChatLog);
-}
-
-/**
- * Custom eventListener for ChatLog message-delete buttons
- * @param {object}   event  The HTML click event
- */
- function _onDeleteIpDipMessage(event) {
-    const coreOnDeleteMessage = ui.chat._onDeleteMessage.bind(ui.chat);
-    event.preventDefault();
-    const li = event.currentTarget.closest(".message");
-    const message = game.messages.get(li.dataset.messageId) || null;
-    if ( message === null ) {
-        const ipdipId = li.querySelector('#ipdip-img').dataset.ipdip;
-        socketWrapper(socketDict.deleteIpDipMessages, ipdipId);
-    } else coreOnDeleteMessage(event);
-}
-
 Hooks.once('init', function() {
     // Create default keybinding to launch the spawnDialog function.
     game.keybindings.register(MODULE_ID, "launchDialog", {
@@ -596,6 +532,18 @@ Hooks.once('init', function() {
         restricted: true,
         precedence: CONST.KEYBINDING_PRECEDENCE.NORMAL
     })
+});
+
+Hooks.once("canvasInit", function() {
+    // Create a layer for the markers on all clients.
+    let config = {
+        group: "interface",
+        layerClass: IpDipDrawingsLayer
+    };
+    let name = "ipdip_layer";
+    const layer = CONFIG.Canvas.layers[name] = config;
+    Object.defineProperty(this, name, {value: layer, writable: false});
+    if ( !(name in canvas) ) Object.defineProperty(canvas, name, {value: new config.layerClass(), writable: false});
 });
 
 Hooks.once('ready', function() {
@@ -622,26 +570,11 @@ Hooks.once('ready', function() {
     // The remainder is only applicable to GM accounts.
     if ( !game.user.isGM )  return;
 
-    // Expose the spawnDialog function so users can make a macro instead of using the keybinding.
+    // Expose the spawnDialog function so GM can make a macro instead of using the keybinding.
     game.modules.get(MODULE_ID).spawnDialog = () => spawnDialog();
 
     // Emit the cleanUp() function to clients in case the DM refreshed browser while the dialog was unfinished.
     game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.cleanUp});
-
-    // Replace chat log message delete eventListener
-    ui.chat.element.off("click", "a.message-delete");
-    const onDeleteIpDipMessage = _onDeleteIpDipMessage.bind(ui.chat);
-    ui.chat.element.on("click", "a.message-delete", onDeleteIpDipMessage);
-
-    // Replace chat log flush eventListener
-    ui.chat.element.find("a.chat-flush").unbind("click");
-    ui.chat.element.find("a.chat-flush").click(flushChatLog);
-
-    // Define the canvasLeftClickHolder
-    canvasLeftClickHolder = canvas.mouseInteractionManager.callbacks.clickLeft
-
-    // Define the canvasdragHolder
-    canvasdragHolder = canvas.mouseInteractionManager.callbacks.dragLeftStart
 });
 
 /** Form application that will be invoked by the settings menu to select a default folder to save images
