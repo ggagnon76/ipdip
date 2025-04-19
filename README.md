@@ -10,9 +10,9 @@
 [![Watch the video](https://i9.ytimg.com/vi_webp/ZyDT1kM_RKQ/mq3.webp?sqp=CMSinqUG-oaymwEmCMACELQB8quKqQMa8AEB-AH-CYAC0AWKAgwIABABGFkgZShkMA8=&rs=AOn4CLCOx67ajLwx9EVji3UrwsOfbFlDog)](https://youtu.be/ZyDT1kM_RKQ)
 ## What is Ip Dip
 
-The Ip Dip module name is based on one of many rhythmic counting-out-rhymes usually played by children to make a choice from several options.  Some may know similar rhymes like 'One potato, two potato' or 'Eeny, meeny, miny, moe'.
+The Ip Dip module is a GM/DM tool to visually make a random selection.  The GM/DM places numbered markers on the game canvas that all players can see for each potential choice, such as: directions to take, tokens to target, grid squares where something may 'spawn', etc...  Once a random marker has been chosen, it is singled out on the canvas and finally displayed as a chat message with a modifiable version of one of the Ip Dip rhymes.
 
-The Ip Dip module is a GM/DM tool to randomly select one of numerous possible choices.  The GM/DM places visual numbered markers on the game canvas for each potential choice, such as: directions to take, tokens to target, grid squares where something may 'spawn', etc...  The markers are also displayed for the players to see, and once a random marker has been chosen, it is singled out on the canvas and also displayed as a chat message with a modified version of one of the Ip Dip rhymes.
+The Ip Dip module name is based on one of many rhythmic counting-out-rhymes usually played by children to make a choice from several options.  Some may know similar rhymes like 'One potato, two potato' or 'Eeny, meeny, miny, moe'.
 
 ## How to use this module?
 
