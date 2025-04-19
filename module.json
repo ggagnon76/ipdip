@@ -1,49 +1,49 @@
 {
-  "id": "ipdip",
-  "title": "Ip Dip",
-  "description": "Foundry VTT module to randomly select a possibility from a visually represented group of possibilities.",
-  "version": "This is auto replaced",
-  "library": "false",
-  "manifestPlusVersion": "1.0.0",
-  "compatibility": {
-    "minimum": 11,
-    "verified": 12.328
-  },
-  "authors": [
-    {
-      "name": "Kerrec Snowmane",
-      "url": "https://github.com/ggagnon76",
-      "discord": "Kerrec Snowmane#5264"
+    "id": "ipdip",
+    "title": "Ip Dip",
+    "description": "Foundry VTT module to randomly select a possibility from a visually represented group of possibilities.",
+    "version": "2.3",
+    "library": "false",
+    "manifestPlusVersion": "1.0.0",
+    "compatibility": {
+        "minimum": 11,
+        "verified": 12.328
+    },
+    "authors": [
+        {
+            "name": "Kerrec Snowmane",
+            "url": "https://github.com/ggagnon76",
+            "discord": "Kerrec Snowmane#5264"
+        }
+    ],
+    "relationships": {
+        "systems": [],
+        "requires": []
+    },
+    "esmodules": [
+        "scripts/ipdip.js"
+    ],
+    "scripts": [],
+    "styles": [
+        "/styles/module.css"
+    ],
+    "languages": [
+        {
+            "lang": "en",
+            "name": "English",
+            "path": "languages/en.json"
+        }
+    ],
+    "socket": true,
+    "url": "https://github.com/ggagnon76/ipdip",
+    "manifest": "https://github.com/ggagnon76/ipdip/releases/latest/download/module.json",
+    "download": "https://github.com/ggagnon76/ipdip/releases/download/2.3/module.zip",
+    "license": "LICENSE",
+    "readme": "README.md",
+    "media": [],
+    "flags": {
+        "fvttdevleague": {
+            "package-jam": 2022
+        }
     }
-  ],
-  "relationships": {
-    "systems" : [],
-    "requires" : []
-  },
-  "esmodules": [
-    "scripts/ipdip.js"
-  ],
-  "scripts": [],
-  "styles": [
-    "/styles/module.css"
-  ],
-  "languages": [
-    {
-      "lang" : "en",
-      "name" : "English",
-      "path" : "languages/en.json"
-    }
-  ],
-  "socket" : true,
-  "url": "This is auto replaced",
-  "manifest": "This is auto replaced",
-  "download": "This is auto replaced",
-  "license": "LICENSE",
-  "readme": "README.md",
-  "media": [],
-  "flags": {
-    "fvttdevleague" : {
-      "package-jam": 2022
-    }
-  }
 }

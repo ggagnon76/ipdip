@@ -26,8 +26,7 @@ const socketDict = {
     newMarker : "newMarker",
     removeContainerHandlers : "removeContainerHandlers",
     updateProbabilities : "updateProbabilities",
-    deleteIpDipMessages : "deleteIpDipMessages",
-    flushIpDipChatLog: "flushIpDipChatLog"
+    deleteIpDipMessages : "deleteIpDipMessages"
 }
 
 /* Function used to fire a function locally for the GM and on clients via socket */
@@ -61,10 +60,6 @@ function socketWrapper(requestID, data=null) {
             deleteIpDipMessages(data);
             game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.deleteIpDipMessages, data: data});
             break;
-        case socketDict.flushIpDipChatLog:
-            flushIpDipChatLog();
-            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.flushIpDipChatLog});
-            break;
         default:
             ui.notifications.error(`Socket action ${requestID} was not found in socketWrapper.`);
     }
@@ -93,9 +88,6 @@ function message_handler(request) {
             break;
         case socketDict.deleteIpDipMessages:
             deleteIpDipMessages(request.data);
-            break;
-        case socketDict.flushIpDipChatLog:
-            flushIpDipChatLog();
             break;
         default:
             ui.notifications.error(`Function ${request.action} was not found in message_handler.`);
@@ -523,35 +515,6 @@ function deleteIpDipMessages(id) {
     }
 }
 
-function flushIpDipChatLog() {
-    ui.chat.element.find("#chat-log")[0].innerHTML = "";
-}
-
-/**
- * Custom eventListener for ChatLog flush button
- * @param {object} event 
- */
-async function flushChatLog(event) {
-    event.preventDefault;
-    await game.messages.flush();
-    socketWrapper(socketDict.flushIpDipChatLog);
-}
-
-/**
- * Custom eventListener for ChatLog message-delete buttons
- * @param {object}   event  The HTML click event
- */
- function _onDeleteIpDipMessage(event) {
-    const coreOnDeleteMessage = ui.chat._onDeleteMessage.bind(ui.chat);
-    event.preventDefault();
-    const li = event.currentTarget.closest(".message");
-    const message = game.messages.get(li.dataset.messageId) || null;
-    if ( message === null ) {
-        const ipdipId = li.querySelector('#ipdip-img').dataset.ipdip;
-        socketWrapper(socketDict.deleteIpDipMessages, ipdipId);
-    } else coreOnDeleteMessage(event);
-}
-
 Hooks.once('init', function() {
     // Create default keybinding to launch the spawnDialog function.
     game.keybindings.register(MODULE_ID, "launchDialog", {
@@ -612,15 +575,6 @@ Hooks.once('ready', function() {
 
     // Emit the cleanUp() function to clients in case the DM refreshed browser while the dialog was unfinished.
     game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.cleanUp});
-
-    // Replace chat log message delete eventListener
-    ui.chat.element.off("click", "a.message-delete");
-    const onDeleteIpDipMessage = _onDeleteIpDipMessage.bind(ui.chat);
-    ui.chat.element.on("click", "a.message-delete", onDeleteIpDipMessage);
-
-    // Replace chat log flush eventListener
-    ui.chat.element.find("a.chat-flush").unbind("click");
-    ui.chat.element.find("a.chat-flush").click(flushChatLog);
 });
 
 /** Form application that will be invoked by the settings menu to select a default folder to save images
