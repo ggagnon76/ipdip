@@ -26,7 +26,8 @@ const socketDict = {
     newMarker : "newMarker",
     removeContainerHandlers : "removeContainerHandlers",
     updateProbabilities : "updateProbabilities",
-    deleteIpDipMessages : "deleteIpDipMessages"
+    deleteIpDipMessages : "deleteIpDipMessages",
+    flushIpDipChatLog: "flushIpDipChatLog"
 }
 
 /* Function used to fire a function locally for the GM and on clients via socket */
@@ -60,6 +61,10 @@ function socketWrapper(requestID, data=null) {
             deleteIpDipMessages(data);
             game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.deleteIpDipMessages, data: data});
             break;
+        case socketDict.flushIpDipChatLog:
+            flushIpDipChatLog();
+            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.flushIpDipChatLog});
+            break;
         default:
             ui.notifications.error(`Socket action ${requestID} was not found in socketWrapper.`);
     }
@@ -88,6 +93,9 @@ function message_handler(request) {
             break;
         case socketDict.deleteIpDipMessages:
             deleteIpDipMessages(request.data);
+            break;
+        case socketDict.flushIpDipChatLog:
+            flushIpDipChatLog();
             break;
         default:
             ui.notifications.error(`Function ${request.action} was not found in message_handler.`);
@@ -409,8 +417,9 @@ async function selectionInCrosshairsPic() {
     1) Get rid of the other markers,
     2) Create an image/texture for the chat message,
     3) Generate a local (not saved to database) chat message,
-    4) Pause code execution so the user has time to see the remaining marker, then
-    5) Cause the marker to fade until it is gone, then clean up and reset the tracking variables */
+    4) Pause code execution so the user has time to see the remaining marker
+    5) Cause the marker to fade until it is gone
+    6) then clean up and reset the tracking variables */
 async function processTableResult(tableResult, newId) {
     keepResultOnly(tableResult);
     const tex = await selectionInCrosshairsPic();
@@ -427,15 +436,17 @@ function removeContainerHandlers() {
 /* Generate the data for a local only (not in database) chat message for the ChatLog, that includes an image of the winning marker */
 async function newLocalChatMessage(texture, id) {
 
-    const content = game.settings.get(MODULE_ID, "Message") + `
-        <div id="ipdip-img" data-ipdip="${id}" style="width:100%"><img src="${texture}" object-fit="contain" /></div>
-    `;
+    const content = game.settings.get(MODULE_ID, "Message")  + 
+        `<div id="ipdip-img" data-ipdip="${id}" style="width:100%"><img src="${texture}" object-fit="contain" /></div>`;
     const chatData = {
-        speaker: {alias: game.settings.get(MODULE_ID, "Speaker")},
-        content: content
+        speaker: {
+            alias: game.settings.get(MODULE_ID, "Speaker")
+        },
+        content: content,
+        style: 1
     };
     const message = new ChatMessage(chatData)
-    await ui.chat.postOne(message);
+    await ui.chat.postOne(message, {notify: true});
 }
 
 /* Create a new marker and place it on the game canvas at the mouse pointer */
@@ -499,7 +510,7 @@ async function rollTable(markerArr) {
     }]);
     const result = await table.roll();
     await table.delete();
-    return result.results[0].text;
+    return result.results[0].description;
 }
 
 /** *********************************************** */
@@ -514,6 +525,20 @@ function deleteIpDipMessages(id) {
         if ( ipdipId === id ) li.parentNode.removeChild(li);
     }
 }
+
+function flushIpDipChatLog() {
+    const orderedList = document.getElementById("sidebar").getElementsByClassName("chat-log")[0];
+    const li = [...orderedList.querySelectorAll("li")];
+    li.forEach(elem => {
+        if (elem.dataset.messageId === "") elem.parentNode.removeChild(elem);
+    })
+}
+
+Hooks.on('closeDialogV2', function (...args) {
+    if (args[0].options.window.title === "CHAT.FlushTitle") {
+        socketWrapper(socketDict.flushIpDipChatLog);
+    }
+});
 
 Hooks.once('init', function() {
     // Create default keybinding to launch the spawnDialog function.
