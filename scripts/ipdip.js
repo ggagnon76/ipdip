@@ -116,39 +116,8 @@ function cleanUp() {
     canvas.tokens.activate();
 }
 
-/** ********************************************************************************************** */
-/** Extend Dialog class to be able to perform extra operations on header button close (or ESC key) */
-/** ********************************************************************************************** */
-
-class IpDipDialog extends Dialog {
-    constructor(data, options={}) {
-        super(data, options);
-        this.modifyHeaderButtons();
-    }
-
-    // Adds the cleanUp function when the header close button is clicked.
-    modifyHeaderButtons() {
-        Hooks.once('getApplicationHeaderButtons', (dialog, buttonsArr) => {
-            buttonsArr[0].onclick = () => {
-                socketWrapper(socketDict.cleanUp);
-                this.close()
-            };
-        })
-    }
-
-    // Adds the cleanUp function when the dialog is closed via ESC key.
-    /* OVERRIDE */
-    _onKeyDown(event) {
-        // Close dialog
-        if ( event.key === "Escape" ) {
-            socketWrapper(socketDict.cleanUp);
-            return super._onKeyDown(event);
-        }
-    }
-}
-
 /** Create a unique drawing layer for IpDip to be able to drop markers without triggering mouse events on other layers */
-class IpDipDrawingsLayer extends DrawingsLayer {
+class IpDipDrawingsLayer extends foundry.canvas.layers.DrawingsLayer {
     
     static get layerOptions() {
         return foundry.utils.mergeObject(super.layerOptions, {
@@ -219,26 +188,20 @@ async function spawnDialog() {
     // Add the container to the stage (for all clients)
     socketWrapper(socketDict.injectContainer);
 
-    // Spawn the dialog then wait for user to submit, cancel or close before continuing.
-    const result = await new Promise(resolve => {
-        new IpDipDialog({
-            title: game.i18n.localize("IpDip.Dialog.Title"),
-            content:    `<p>${game.i18n.localize("IpDip.Dialog.Content1")}</p>
-                        <p>${game.i18n.localize("IpDip.Dialog.Content2")}</p>
-                        <p>${game.i18n.localize("IpDip.Dialog.Content3")}</p>`,
-            buttons: {
-                yes: {
-                    icon: '<i class="fas fa-check"></i>',
-                    label: game.i18n.localize("IpDip.Confirmation.Choose"),
-                    callback: () => resolve(true)
-                },
-                no: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: game.i18n.localize("IpDip.Confirmation.Cancel"),
-                    callback: () => resolve(false)
-                }
-                }
-            }).render(true);
+    const result = await foundry.applications.api.DialogV2.confirm({
+        window: { title: game.i18n.localize("IpDip.Dialog.Title")},
+        content:    `<p>${game.i18n.localize("IpDip.Dialog.Content1")}</p>
+                    <p>${game.i18n.localize("IpDip.Dialog.Content2")}</p>
+                    <p>${game.i18n.localize("IpDip.Dialog.Content3")}</p>`,
+        yes: {
+            icon: "fas fa-check",
+            label: game.i18n.localize("IpDip.Confirmation.Choose")
+        },
+        no: {
+            icon: "fas fa-times",
+            label: game.i18n.localize("IpDip.Confirmation.Cancel")
+        },
+        rejectClose: false
     });
 
     isSpawned = false;
@@ -385,7 +348,7 @@ async function selectionInCrosshairsPic() {
     const d = canvas.dimensions;
     const marker = markerArr[0].container;
 
-    const crosshairSprite = new PIXI.Sprite(await loadTexture(CROSSHAIR_SRC));
+    const crosshairSprite = new PIXI.Sprite(await foundry.canvas.loadTexture(CROSSHAIR_SRC));
     crosshairSprite.anchor.set(0.5);
     crosshairSprite.angle = 45;
     crosshairSprite.alpha = .75;
@@ -443,7 +406,7 @@ async function newMarker(id, x, y) {
 
     const marker = new PIXI.Container;
     // Load up the marker texture
-    marker.sprite = new PIXI.Sprite(await loadTexture(MARKER_SRC));
+    marker.sprite = new PIXI.Sprite(await foundry.canvas.loadTexture(MARKER_SRC));
     marker.sprite.anchor.set(0.5);
 
     const count = new PIXI.BitmapText(id, {fontName: "IpDipFont"});
@@ -499,7 +462,7 @@ async function rollTable(markerArr) {
     }]);
     const result = await table.roll();
     await table.delete();
-    return result.results[0].text;
+    return result.results[0].description;
 }
 
 /** *********************************************** */
