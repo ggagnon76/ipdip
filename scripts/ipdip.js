@@ -332,7 +332,7 @@ async function selectionInCrosshairsPic() {
 async function processTableResult(tableResult, newId) {
     keepResultOnly(tableResult);
     const tex = await selectionInCrosshairsPic();
-    await Message(tex, newId);
+    await newLocalChatMessage(tex, newId);
     await wait(2000);
     fadeAndCleanUp();
 }
