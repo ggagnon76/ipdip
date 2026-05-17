@@ -3,6 +3,7 @@ const MODULE_ID = "ipdip";
 const SOCKET_MODULE_NAME = "module." + MODULE_ID;
 const MARKER_SRC = "modules/ipdip/assets/Marker.png";
 const CROSSHAIR_SRC = "modules/ipdip/assets/Crosshairs.png";
+const CAPTURE_RESOLUTION = 3;
 
 /** Condition tracking variables */
 let isSpawned = false;
@@ -301,7 +302,7 @@ async function selectionInCrosshairsPic() {
     const renderTexture = PIXI.RenderTexture.create({
         width: Math.ceil(scaledSize),
         height: Math.ceil(scaledSize),
-        resolution: 1
+        resolution: CAPTURE_RESOLUTION
     });
 
     const transform = new PIXI.Matrix();
