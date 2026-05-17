@@ -279,70 +279,6 @@ function fadeAndCleanUp() {
     debounceFadeAndCleanUp();
 }
 
-/**
- * The following function was written and provided by Foundry VTT Discord community member dev7355608
- * https://discord.com/channels/170995199584108546/811676497965613117/1004380429257801768
- * 
- * This function will crop a portion of the game canvas (or any PIXI.Container) and return a texture
- * 
- * @param {object}      options     An object which defines the data to define where to capture a portion of the game canvas.
- * @param {object}      [options.container=canvas.stage]    What part of the canvas children to crop an image from
- * @param {number}      [options.x=null]                    The X pixel coordinate relative to the container origin
- * @param {number}      [options.y=null]                    The Y pixel coordinate relative to the container origin
- * @param {number}      [options.scale=null]                The scale to tranform the container before capturing a cropped image
- * @param {width}       [options.width=null]                The width in pixels for the size of the cropped portion of the image
- * @param {height}      [options.height=null]               The height in pixels for the size of the cropped portion of the image
- * @param {resolution}  [options.resolution=null]           The RenderTexture resolution to use for the image texture
- * @returns {object}    The RenderTexture with the image data.
- */
-function captureCanvas({ container = canvas.stage, x = null, y = null, scale = null, width = null, height = null, resolution = null } = {}) {
-    if (!canvas.ready) {
-        return;
-    }
-
-    const renderer = canvas.app.renderer;
-    const viewPosition = { ...canvas.scene._viewPosition };
-
-    renderer.resize(
-        width ?? renderer.screen.width,
-        height ?? renderer.screen.height
-    );
-
-    width = canvas.screenDimensions[0] = renderer.screen.width;
-    height = canvas.screenDimensions[1] = renderer.screen.height;
-
-    canvas.stage.position.set(width / 2, height / 2);
-    canvas.pan({
-        x: x ?? viewPosition.x,
-        y: y ?? viewPosition.y,
-        scale: scale ?? viewPosition.scale
-    });
-
-    const renderTexture = PIXI.RenderTexture.create({
-        width,
-        height,
-        resolution: resolution ?? renderer.resolution
-    });
-
-    const cacheParent = canvas.stage.enableTempParent();
-
-    canvas.stage.updateTransform();
-    canvas.stage.disableTempParent(cacheParent);
-
-    if (container !== canvas.stage) {
-        renderer.render(canvas.hidden, { renderTexture, skipUpdateTransform: true, clear: false });
-    }
-
-    renderer.render(container, { renderTexture, skipUpdateTransform: true });
-
-    canvas._onResize();
-    canvas.pan(viewPosition);
-
-    return renderTexture;
-}
-
-/* This function crops a 3grid x 3grid square around the winning marker,
-   puts a crosshair graphic over the center and returns an image */
 async function selectionInCrosshairsPic() {
 
     const d = canvas.dimensions;
@@ -357,15 +293,34 @@ async function selectionInCrosshairsPic() {
 
     marker.alpha = 0;
     container.addChild(crosshairSprite);
-    const texture = captureCanvas({x: marker.x, y: marker.y, scale: 1, width: 3 * d.size, height: 3 * d.size});
+
+    const renderer = canvas.app.renderer;
+    const screenPos = canvas.stage.toGlobal({ x: marker.x, y: marker.y });
+    const scaledSize = 3 * d.size * canvas.stage.scale.x;
+
+    const renderTexture = PIXI.RenderTexture.create({
+        width: Math.ceil(scaledSize),
+        height: Math.ceil(scaledSize),
+        resolution: 1
+    });
+
+    const transform = new PIXI.Matrix();
+    transform.translate(
+        -screenPos.x + scaledSize / 2,
+        -screenPos.y + scaledSize / 2
+    );
+
+    renderer.render(canvas.stage, { renderTexture, transform, clear: true });
+
     marker.alpha = 1;
     crosshairSprite.alpha = 0;
 
-    const image = await canvas.app.renderer.extract.base64(texture, "image/webp");
+    const image = await renderer.extract.base64(renderTexture, "image/webp");
 
+    renderTexture.destroy(true);
     PIXI.Assets.unload(CROSSHAIR_SRC);
 
-    return image
+    return image;
 }
 
 /* The logic to follow once a marker has been chosen.
@@ -377,7 +332,7 @@ async function selectionInCrosshairsPic() {
 async function processTableResult(tableResult, newId) {
     keepResultOnly(tableResult);
     const tex = await selectionInCrosshairsPic();
-    await newLocalChatMessage(tex, newId);
+    await Message(tex, newId);
     await wait(2000);
     fadeAndCleanUp();
 }
@@ -388,17 +343,22 @@ function removeContainerHandlers() {
 }
 
 /* Generate the data for a local only (not in database) chat message for the ChatLog, that includes an image of the winning marker */
+/* Had to bypass the postOne method because PF2e: Secrets of Grayce module breaks it when used this way */
 async function newLocalChatMessage(texture, id) {
-
     const content = game.settings.get(MODULE_ID, "Message") + `
-        <div id="ipdip-img" data-ipdip="${id}" style="width:100%"><img src="${texture}" object-fit="contain" /></div>
-    `;
+        <div id="ipdip-img" data-ipdip="${id}" style="width:100%"><img src="${texture}" style="width:100%; height:auto;" /></div>    `;
     const chatData = {
         speaker: {alias: game.settings.get(MODULE_ID, "Speaker")},
         content: content
     };
-    const message = new ChatMessage(chatData)
-    await ui.chat.postOne(message);
+    const message = new ChatMessage(chatData);
+    const html = await message.renderHTML();
+    const chatLog = document.querySelectorAll('ol.chat-log')[1];
+    if (chatLog) {
+        chatLog.appendChild(html);
+        const chatScroll = document.querySelector('.chat-scroll');
+        if (chatScroll) chatScroll.scrollTop = chatScroll.scrollHeight;
+    }
 }
 
 /* Create a new marker and place it on the game canvas at the mouse pointer */
