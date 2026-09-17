@@ -223,7 +223,7 @@ async function selectionInCrosshairsPic() {
     const renderTexture = PIXI.RenderTexture.create({
         width: Math.ceil(scaledSize),
         height: Math.ceil(scaledSize),
-        resolution: CAPTURE_RESOLUTION
+        resolution: 3
     });
 
     const transform = new PIXI.Matrix();
