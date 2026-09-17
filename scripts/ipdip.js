@@ -1,7 +1,9 @@
-import { socketDict, socketWrapper, message_handler, SOCKET_MODULE_NAME, MODULE_ID } from "./socket.js";
-import { IpDipDrawingsLayer } from "./canvas_and_layers.js";
-import { IPDIP_FormApp, IpDipDialog } from "./forms_and_classes.js";
-import { rollTable } from "./functions.js";
+/** CONSTANTS */
+const MODULE_ID = "ipdip";
+const SOCKET_MODULE_NAME = "module." + MODULE_ID;
+const MARKER_SRC = "modules/ipdip/assets/Marker.png";
+const CROSSHAIR_SRC = "modules/ipdip/assets/Crosshairs.png";
+const CAPTURE_RESOLUTION = 3;
 
 /** Condition tracking variables */
 export let isSpawned = false;
@@ -28,7 +30,140 @@ Hooks.on('closeDialogV2', function (...args) {
     if (args[0].options.window.title === "CHAT.FlushTitle") {
         socketWrapper(socketDict.flushIpDipChatLog);
     }
-});
+    markerArr = [];
+    markerCounter = 1;
+    if ( wheelHookId !== null) Hooks.off('canvasPan', wheelHookId);
+    wheelHookId = null;
+    stageScale = null;
+    isSpawned = false;
+    canvas.tokens.activate();
+}
+
+/** Create a unique drawing layer for IpDip to be able to drop markers without triggering mouse events on other layers */
+class IpDipDrawingsLayer extends foundry.canvas.layers.DrawingsLayer {
+    
+    static get layerOptions() {
+        return foundry.utils.mergeObject(super.layerOptions, {
+            name: "IpDipMarkers",
+            zIndex: 110
+        });
+    }
+
+    /** override */
+    _activate() {};
+
+    /** override */
+    _deactivate() {};
+
+    // OVERRIDE the _onLeftClick so it drops a marker when IpDip is active
+    _onClickLeft(event) {
+        if (isSpawned) {
+            socketWrapper(socketDict.newMarker, [markerCounter, canvas.mousePosition.x, canvas.mousePosition.y]);
+            stageScale = canvas.stage.scale.x;
+            
+            // Scroll Wheel functionality for markers.
+            if ( wheelHookId === null ) {
+                wheelHookId = Hooks.on('canvasPan', (canvas, data) => {
+
+                    const multiplier = data.scale < stageScale ? -1 : 1
+
+                    const loc = canvas.mousePosition;
+
+                    let targetMarker = undefined;
+                    for (const marker of markerArr) {
+                        if (    loc.x > (marker.container.x - marker.container.width / 2) &&
+                                loc.x < (marker.container.x + marker.container.width / 2) &&
+                                loc.y > (marker.container.y - marker.container.height / 2) &&
+                                loc.y < (marker.container.y + marker.container.height / 2)        
+                        ) {
+                            targetMarker = marker;
+                            socketWrapper(socketDict.updateProbabilities, [marker.id, multiplier]);
+                            canvas.stage.scale.set(stageScale, stageScale);
+                            canvas.updateBlur(stageScale);
+                            return;
+                        }
+                    }
+
+                    if ( targetMarker === undefined ) {
+                        stageScale = data.scale;
+                        return;
+                    }
+                });
+            }
+            return;
+        }
+        //super._onClickLeft(event);
+    }
+}
+
+/** ************************************************************************************************************* */
+/** spawnDialog is the function that is invoked by the keybinding or via macro.  It is the launch point for IpDip */
+/** ************************************************************************************************************* */
+
+async function spawnDialog() {
+    // Only a GM should use this.  Don't let more than one dialog spawn at the same time.
+    if ( !game.user.isGM || isSpawned ) return;
+    isSpawned = true;
+
+    // Intentionally change to the drawings layer so mouse clicking on the canvas will not activate controls like tokens, doors, etc...
+    canvas.ipdip_layer.activate();
+
+    // Add the container to the stage (for all clients)
+    socketWrapper(socketDict.injectContainer);
+
+    const result = await foundry.applications.api.DialogV2.confirm({
+        window: { title: game.i18n.localize("IpDip.Dialog.Title")},
+        content:    `<p>${game.i18n.localize("IpDip.Dialog.Content1")}</p>
+                    <p>${game.i18n.localize("IpDip.Dialog.Content2")}</p>
+                    <p>${game.i18n.localize("IpDip.Dialog.Content3")}</p>`,
+        yes: {
+            icon: "fas fa-check",
+            label: game.i18n.localize("IpDip.Confirmation.Choose")
+        },
+        no: {
+            icon: "fas fa-times",
+            label: game.i18n.localize("IpDip.Confirmation.Cancel")
+        },
+        rejectClose: false
+    });
+
+    isSpawned = false;
+
+    // If the user canceled or closed the dialog without submitting, or clicked submit without placing a marker...
+    if ( !result || !markerArr.length ) {
+        socketWrapper(socketDict.cleanUp);
+        return;
+    };
+
+    // Remove the eventHandler for the markers so they don't change probability value of the remaining marker when the others are deleted.
+    socketWrapper(socketDict.removeContainerHandlers);
+
+    // Create a Rollable Table, roll on it, delete the table and return the rolled result
+    const tableResult = await rollTable(markerArr);
+
+    // Act on the result.
+    const newId = foundry.utils.randomID(16);
+    socketWrapper(socketDict.tableResult, [tableResult, newId]);
+}
+
+/** ********************************************** */
+/** All the required functions for functions above */
+/** ********************************************** */
+
+/* Implement a delay in code execution */
+async function wait(ms) {
+    return new Promise(resolve => {
+        setTimeout(resolve, ms);
+    });
+}
+
+/* Recalculates the probabilites when markers are added to the canvas or a marker's weight is increased/decreased */
+function recalculateProbabilities() {
+    const sum = markerArr.reduce((pv, cv) => pv + cv.weight, 0);
+    for (const marker of markerArr) {
+        marker.container.prob.text = Math.round(marker.weight / sum * 100).toString() + "%";
+    }
+}
 
 export function flushIpDipChatLog() {
     const orderedList = document.getElementById("sidebar").getElementsByClassName("chat-log")[0];
@@ -38,9 +173,193 @@ export function flushIpDipChatLog() {
     })
 }
 
-/**
- * Create default keybinding to launch the spawnDialog function.
- */
+/* Removes all the markers except the one that was rolled by the Rollable Table */
+function keepResultOnly(id) {
+    for (const marker of markerArr) {
+        if ( marker.id === id) continue;
+        container.removeChild(marker.container);
+        marker.container.destroy({children: true});
+    }
+    markerArr = markerArr.filter(m => m.id === id);
+}
+
+/* Debounce that implements how fast the remaining marker fades from the game canvas. */
+const debounceFadeAndCleanUp = foundry.utils.debounce( () => {
+    fadeAndCleanUp();
+}, 100);
+
+/* Initial function that begins the remaining marker fade, or cleans up after marker is no longer visible */
+function fadeAndCleanUp() {
+    
+    if ( container.alpha < 0.05 ) {
+        cleanUp();
+        container.alpha = 1;
+        return;
+    }
+
+    container.alpha -= .05;
+    debounceFadeAndCleanUp();
+}
+
+async function selectionInCrosshairsPic() {
+
+    const d = canvas.dimensions;
+    const marker = markerArr[0].container;
+
+    const crosshairSprite = new PIXI.Sprite(await foundry.canvas.loadTexture(CROSSHAIR_SRC));
+    crosshairSprite.anchor.set(0.5);
+    crosshairSprite.angle = 45;
+    crosshairSprite.alpha = .75;
+    crosshairSprite.x = marker.x;
+    crosshairSprite.y = marker.y;
+
+    marker.alpha = 0;
+    container.addChild(crosshairSprite);
+
+    const renderer = canvas.app.renderer;
+    const screenPos = canvas.stage.toGlobal({ x: marker.x, y: marker.y });
+    const scaledSize = 3 * d.size * canvas.stage.scale.x;
+
+    const renderTexture = PIXI.RenderTexture.create({
+        width: Math.ceil(scaledSize),
+        height: Math.ceil(scaledSize),
+        resolution: CAPTURE_RESOLUTION
+    });
+
+    const transform = new PIXI.Matrix();
+    transform.translate(
+        -screenPos.x + scaledSize / 2,
+        -screenPos.y + scaledSize / 2
+    );
+
+    renderer.render(canvas.stage, { renderTexture, transform, clear: true });
+
+    marker.alpha = 1;
+    crosshairSprite.alpha = 0;
+
+    const image = await renderer.extract.base64(renderTexture, "image/webp");
+
+    renderTexture.destroy(true);
+    PIXI.Assets.unload(CROSSHAIR_SRC);
+
+    return image;
+}
+
+/* The logic to follow once a marker has been chosen.
+    1) Get rid of the other markers,
+    2) Create an image/texture for the chat message,
+    3) Generate a local (not saved to database) chat message,
+    4) Pause code execution so the user has time to see the remaining marker, then
+    5) Cause the marker to fade until it is gone, then clean up and reset the tracking variables */
+async function processTableResult(tableResult, newId) {
+    keepResultOnly(tableResult);
+    const tex = await selectionInCrosshairsPic();
+    await newLocalChatMessage(tex, newId);
+    await wait(2000);
+    fadeAndCleanUp();
+}
+
+/* Remove the eventListener for the marker container, so it doesn't fire off recalculateProbabilities when markers are removed */
+function removeContainerHandlers() {
+    container.off('childAdded');
+}
+
+/* Generate the data for a local only (not in database) chat message for the ChatLog, that includes an image of the winning marker */
+/* Had to bypass the postOne method because PF2e: Secrets of Grayce module breaks it when used this way */
+async function newLocalChatMessage(texture, id) {
+    const content = game.settings.get(MODULE_ID, "Message") + `
+        <div id="ipdip-img" data-ipdip="${id}" style="width:100%"><img src="${texture}" style="width:100%; height:auto;" /></div>    `;
+    const chatData = {
+        speaker: {alias: game.settings.get(MODULE_ID, "Speaker")},
+        content: content
+    };
+    const message = new ChatMessage(chatData);
+    const html = await message.renderHTML();
+    const chatLog = document.querySelectorAll('ol.chat-log')[1];
+    if (chatLog) {
+        chatLog.appendChild(html);
+        const chatScroll = document.querySelector('.chat-scroll');
+        if (chatScroll) chatScroll.scrollTop = chatScroll.scrollHeight;
+    }
+}
+
+/* Create a new marker and place it on the game canvas at the mouse pointer */
+async function newMarker(id, x, y) {
+
+    const marker = new PIXI.Container;
+    // Load up the marker texture
+    marker.sprite = new PIXI.Sprite(await foundry.canvas.loadTexture(MARKER_SRC));
+    marker.sprite.anchor.set(0.5);
+
+    const count = new PIXI.BitmapText(id, {fontName: "IpDipFont"});
+    count.anchor.set(0.5, 0.75);
+
+    marker.prob = new PIXI.BitmapText("%", {fontName: "IpDipFontSmall"});
+    marker.prob.anchor.set(0.5, -0.7);
+
+    const d = canvas.dimensions;
+    const scale = d.size / marker.sprite.texture.orig.width;
+
+    marker.addChild(marker.sprite);
+    marker.addChild(count);
+    marker.addChild(marker.prob);
+
+    marker.x = x;
+    marker.y = y;
+    marker.scale.set(scale, scale);
+
+    markerArr.push({id: markerCounter.toString(), weight: 1, container: marker});
+
+    container.addChild(marker);
+
+    markerCounter += 1;
+}
+
+/* When the mouse pointer is hovering over a marker and the mouse wheel is scrolled up or down,
+   update the weight for that marker and recalculate probabilities for all markers */
+function updateProbabilities(id, multiplier) {
+    const marker = markerArr.filter(m => m.id === id).pop();
+    // increases or reduces marker weight, but not below 1.
+    marker.weight = marker.weight + 1 * multiplier ? marker.weight += 1 * multiplier : 1;
+    recalculateProbabilities();
+}
+
+
+/* Creates a Rollable Table.  Rolls on the table.  Deletes the table and returns the result */
+async function rollTable(markerArr) {
+    let count = 0;
+    const sum = markerArr.reduce((pv, cv) => pv + cv.weight, 0);
+    const tableContent = markerArr.map((e) => {
+        count += e.weight;
+        return {
+            range: [count - e.weight + 1, count],
+            text: e.id,
+            type: CONST.TABLE_RESULT_TYPES.TEXT,
+        }
+    });
+    const [table] =  await RollTable.createDocuments([{
+        name: "Ip Dip",
+        formula: `1d${sum}`,
+        results: tableContent
+    }]);
+    const result = await table.roll();
+    await table.delete();
+    return result.results[0].description;
+}
+
+/** *********************************************** */
+/** Hooks and delete-message eventListener function */
+/** *********************************************** */
+
+function deleteIpDipMessages(id) {
+    const log = ui.chat.element.find('#chat-log')[0];
+    const items = log.getElementsByTagName("li");
+    for (const li of items) {
+        const ipdipId = li.querySelector('#ipdip-img')?.dataset.ipdip || null;
+        if ( ipdipId === id ) li.parentNode.removeChild(li);
+    }
+}
+
 Hooks.once('init', function() {
     game.keybindings.register(MODULE_ID, "launchDialog", {
         name: "Ip Dip Keybinding",
@@ -138,59 +457,3 @@ Hooks.once('init', () => {
         restricted: true
     })
 })
-
-/** ************************************************************************************************************* */
-/** spawnDialog is the function that is invoked by the keybinding or via macro.  It is the launch point for IpDip */
-/** ************************************************************************************************************* */
-
-async function spawnDialog() {
-    // Only a GM should use this.  Don't let more than one dialog spawn at the same time.
-    if ( !game.user.isGM || isSpawned ) return;
-    isSpawned = true;
-
-    // Intentionally change to the drawings layer so mouse clicking on the canvas will not activate controls like tokens, doors, etc...
-    canvas.ipdip_layer.activate();
-
-    // Add the container to the stage (for all clients)
-    socketWrapper(socketDict.injectContainer);
-
-    // Spawn the dialog then wait for GM to submit, cancel or close before continuing.
-    const result = await new Promise(resolve => {
-        new IpDipDialog({
-            title: game.i18n.localize("IpDip.Dialog.Title"),
-            content:    `<p>${game.i18n.localize("IpDip.Dialog.Content1")}</p>
-                        <p>${game.i18n.localize("IpDip.Dialog.Content2")}</p>
-                        <p>${game.i18n.localize("IpDip.Dialog.Content3")}</p>`,
-            buttons: {
-                yes: {
-                    icon: '<i class="fas fa-check"></i>',
-                    label: game.i18n.localize("IpDip.Confirmation.Choose"),
-                    callback: () => resolve(true)
-                },
-                no: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: game.i18n.localize("IpDip.Confirmation.Cancel"),
-                    callback: () => resolve(false)
-                }
-                }
-            }).render(true);
-    });
-
-    isSpawned = false;
-
-    // If the GM canceled or closed the dialog without submitting, or clicked submit without placing a marker...
-    if ( !result || !markerArr.length ) {
-        socketWrapper(socketDict.cleanUp);
-        return;
-    };
-
-    // Remove the eventHandler for the markers so they don't change probability value of the remaining marker when the others are deleted.
-    socketWrapper(socketDict.removeContainerHandlers);
-
-    // Create a Rollable Table, roll on it, delete the table and return the rolled result
-    const tableResult = await rollTable(markerArr);
-
-    // Act on the result.
-    const newId = foundry.utils.randomID(16);
-    socketWrapper(socketDict.tableResult, [tableResult, newId]);
-}
