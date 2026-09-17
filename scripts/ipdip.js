@@ -301,7 +301,7 @@ async function selectionInCrosshairsPic() {
     const renderTexture = PIXI.RenderTexture.create({
         width: Math.ceil(scaledSize),
         height: Math.ceil(scaledSize),
-        resolution: 1
+        resolution: 3
     });
 
     const transform = new PIXI.Matrix();
@@ -332,7 +332,7 @@ async function selectionInCrosshairsPic() {
 async function processTableResult(tableResult, newId) {
     keepResultOnly(tableResult);
     const tex = await selectionInCrosshairsPic();
-    await Message(tex, newId);
+    await newLocalChatMessage(tex, newId);
     await wait(2000);
     fadeAndCleanUp();
 }
