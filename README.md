@@ -1,8 +1,15 @@
 # A FoundryVTT Module - Ip Dip
 
-**[Compatibility]**: *FoundryVTT* V11  
+**[Compatibility]**: *FoundryVTT* V14  
 **[Systems]**: *ALL*  
 **[Languages]**: *English*
+
+## Notice to Users:
+I created this module years ago as a fun project to learn how to code.  The first versions were frankensteined code that I hodgepodged together from Foundry Source Code and lots of trial and error.  Back then, when I was 110% into this project, I couldn't have explained how the code works in a way that would satisfy a Foundry Developer that I am the one that coded this, even though this project pre-dated AI.  Now, after years of not coding constantly (only fixing what I need to keep it compatible with new Foundry versions), with Foundry's AI policy, if for whatever reason they suspected this code was written by AI and interviewed me, I doubt I would be able to explain the code in a way that would satisfy them of it's human made content.
+
+That being said, I have been using AI to explain to me what I need to fix when this module crashes.  AI doesn't write any of my code, but it tells me what deprecated and what I need to fix.  I've been doing that to keep it compatible since I still use it in the games I run.  However, I am not going to maintain it as an updated repository in the Foundry ecosystem.  As long as I continue to update it for myself, there will be a version that you can download and install manually.
+
+I welcome any developer that wants to maintain this module to clone it and take it up.  I will gladly move on to my new interests while continuing to have access to this tool.  I would just like to have some accreditation for the original version.  It's one of my only useful innovative projects and it never made me 1c.  Which is fine, it was all for fun anyway.  I have a full time job already.
 
 ## Demo Video
 [![Watch the video](https://i9.ytimg.com/vi_webp/ZyDT1kM_RKQ/mq3.webp?sqp=CMSinqUG-oaymwEmCMACELQB8quKqQMa8AEB-AH-CYAC0AWKAgwIABABGFkgZShkMA8=&rs=AOn4CLCOx67ajLwx9EVji3UrwsOfbFlDog)](https://youtu.be/ZyDT1kM_RKQ)
