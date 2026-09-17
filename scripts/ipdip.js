@@ -3,32 +3,109 @@ const MODULE_ID = "ipdip";
 const SOCKET_MODULE_NAME = "module." + MODULE_ID;
 const MARKER_SRC = "modules/ipdip/assets/Marker.png";
 const CROSSHAIR_SRC = "modules/ipdip/assets/Crosshairs.png";
-const CAPTURE_RESOLUTION = 3;
 
 /** Condition tracking variables */
-export let isSpawned = false;
-export let markerArr = [];
+let isSpawned = false;
+let markerCounter = 1;
+let markerArr = [];
+let wheelHookId = null;
+let stageScale = null;
 
-export function update_markerArr(arg) {
-    markerArr = arg;
+// Create a PIXI container to add the markers into
+const container = new PIXI.Container();
+
+/** ******************************************************* */
+/** Message_handler and functions for socket communications */
+/** ******************************************************* */
+
+/* Useful dictionary for calling socketWrapper and determining the switch in message_handler */
+const socketDict = {
+    injectContainer : "injectContainer",
+    cleanUp : "cleanUp",
+    tableResult : "tableResult",
+    newMarker : "newMarker",
+    removeContainerHandlers : "removeContainerHandlers",
+    updateProbabilities : "updateProbabilities",
+    deleteIpDipMessages : "deleteIpDipMessages"
 }
 
-export function update_isSpawned(arg) {
-    isSpawned = arg;
+/* Function used to fire a function locally for the GM and on clients via socket */
+function socketWrapper(requestID, data=null) {
+    switch(requestID) {
+        case socketDict.injectContainer:
+            injectContainer();
+            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.injectContainer});
+            break;
+        case socketDict.cleanUp:
+            cleanUp();
+            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.cleanUp});
+            break;
+        case socketDict.tableResult:
+            processTableResult(...data);
+            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.tableResult, data: data});
+            break;
+        case socketDict.newMarker:
+            newMarker(...data);
+            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.newMarker, data: data});
+            break;
+        case socketDict.removeContainerHandlers:
+            removeContainerHandlers();
+            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.removeContainerHandlers});
+            break;
+        case socketDict.updateProbabilities:
+            updateProbabilities(...data);
+            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.updateProbabilities, data: data});
+            break;
+        case socketDict.deleteIpDipMessages:
+            deleteIpDipMessages(data);
+            game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.deleteIpDipMessages, data: data});
+            break;
+        default:
+            ui.notifications.error(`Socket action ${requestID} was not found in socketWrapper.`);
+    }
 }
 
-/** *********************************************** */
-/** Hooks and delete-message eventListener function */
-/** *********************************************** */
+/* The function that determines the required action when receiving a request from a socket communication. */
+function message_handler(request) {
+    switch(request.action) {
+        case socketDict.injectContainer:
+            injectContainer();
+            break;
+        case socketDict.cleanUp:
+            cleanUp();
+            break;
+        case socketDict.tableResult:
+            processTableResult(...request.data);
+            break;
+        case socketDict.newMarker:
+            newMarker(...request.data);
+            break;
+        case socketDict.removeContainerHandlers:
+            removeContainerHandlers();
+            break;
+        case socketDict.updateProbabilities:
+            updateProbabilities(...request.data);
+            break;
+        case socketDict.deleteIpDipMessages:
+            deleteIpDipMessages(request.data);
+            break;
+        default:
+            ui.notifications.error(`Function ${request.action} was not found in message_handler.`);
+    }
+}
 
 /**
- * Hook required to identify when a user tries to flush the chat log.
- * The local only chat messages will remain after Foundry flushes the chat log
- * This hook and function removes those local only chat log messages.
+ * Removes PIXI Container from canvas.stage
+ * Deletes individual markers and their PIXI instances
+ * Resets individual variables used to track marker info
+ * Resets to Token Layer
  */
-Hooks.on('closeDialogV2', function (...args) {
-    if (args[0].options.window.title === "CHAT.FlushTitle") {
-        socketWrapper(socketDict.flushIpDipChatLog);
+function cleanUp() {
+
+    canvas.stage.removeChild(container);
+    const childrenArr = container.removeChildren();
+    for (const child of childrenArr) {
+        child.destroy({children: true});
     }
     markerArr = [];
     markerCounter = 1;
@@ -165,11 +242,12 @@ function recalculateProbabilities() {
     }
 }
 
-export function flushIpDipChatLog() {
-    const orderedList = document.getElementById("sidebar").getElementsByClassName("chat-log")[0];
-    const li = [...orderedList.querySelectorAll("li")];
-    li.forEach(elem => {
-        if (elem.dataset.messageId === "") elem.parentNode.removeChild(elem);
+/* Adds the container to the game canvas and creates an eventListener which fires when children are added */
+function injectContainer() {
+    canvas.stage.addChild(container);
+    container.eventMode = 'static';
+    container.on('childAdded', () => {
+        recalculateProbabilities();
     })
 }
 
@@ -361,6 +439,7 @@ function deleteIpDipMessages(id) {
 }
 
 Hooks.once('init', function() {
+    // Create default keybinding to launch the spawnDialog function.
     game.keybindings.register(MODULE_ID, "launchDialog", {
         name: "Ip Dip Keybinding",
         hint: "Launches a confirmation dialog application for the Ip Dip module.",
@@ -378,10 +457,8 @@ Hooks.once('init', function() {
     })
 });
 
-/**
- * Inject the IpDipDrawingsLayer into the canvas.
- */
 Hooks.once("canvasInit", function() {
+    // Create a layer for the markers on all clients.
     let config = {
         group: "interface",
         layerClass: IpDipDrawingsLayer
@@ -392,12 +469,6 @@ Hooks.once("canvasInit", function() {
     if ( !(name in canvas) ) Object.defineProperty(canvas, name, {value: new config.layerClass(), writable: false});
 });
 
-/**
- * PIXI code for the text injected into the markers
- * Enable socket coms
- * Expose the SpawnDialog() function for use in macros
- * In case the GM refreshed his browser while IpDip had markers active that players will see, issue the cleanUp() function to reset everything.
- */
 Hooks.once('ready', function() {
     // Create the BitmapFont for the marker numbers
     PIXI.BitmapFont.from("IpDipFont", {
@@ -429,9 +500,42 @@ Hooks.once('ready', function() {
     game.socket.emit(SOCKET_MODULE_NAME, {action: socketDict.cleanUp});
 });
 
-/**
- * World settings to allow the end user to customize the chat card Speaker and the chat card message
- */
+/** Form application that will be invoked by the settings menu to select a default folder to save images
+*/
+export class IPDIP_FormApp extends FormApplication {
+    constructor() {
+      super();
+    }
+  
+    static get defaultOptions() {
+      return mergeObject(super.defaultOptions, {
+        width: 500,
+        template: `./modules/${MODULE_ID}/templates/ipdip-settings-menu.hbs`,
+        id: "ipdip-settings",
+        title: game.i18n.localize('IpDip.Settings.Name'),
+        submitOnChange: true,
+        closeOnSubmit: false
+      })
+    }
+  
+    getData() {
+      return {
+        speaker: game.settings.get(MODULE_ID, "Speaker"),
+        message: game.settings.get(MODULE_ID, "Message")
+      }
+    }
+  
+    async _updateObject(event, formData) {
+
+        if ( event.type === "submit") {
+            game.settings.set(MODULE_ID, "Speaker", formData["ipdip-speaker"]);
+            game.settings.set(MODULE_ID, "Message", formData["ipdip-message"]);
+            this.close()
+        }
+    }
+}
+
+// World settings to allow the end user to customize the chat card Speaker and the chat card message
 Hooks.once('init', () => {
     game.settings.register(MODULE_ID, "Speaker", {
         scope: "world",
